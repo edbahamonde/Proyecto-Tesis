@@ -65,7 +65,13 @@ void loop() {
   TEMPERATURA = dht.readTemperature();
   HUMEDAD = dht.readHumidity();
 
-  if (isnan(TEMPERATURA) || isnan(HUMEDAD)) {
+  temperatura();
+  
+  delay(2000);
+}
+
+void temperatura(){
+  if (isnan(TEMPERATURA)) {
     display.setTextSize(1);
     display.setCursor(0, 57);
     display.print(F("Problema al leer DHT22"));
@@ -84,18 +90,6 @@ void loop() {
   Serial.print("\tHumedad: ");
   Serial.print(HUMEDAD);
   Serial.println();
-
-  /*u8g2.setFontDirection(0);
-  u8g2.setFont(u8g2_font_inb24_mf);
-  u8g2.drawStr(0, 15, "T"); --> No funcionó para mostrar letra mas grande*/
-
-  /*display.setTextSize(3);
-  display.setCursor(0, 11);
-  display.print(TEMPERATURA, 0);
-  display.setCursor(37, 11);
-  display.setTextSize(2);
-  display.print((char)247);
-  display.print("C");*/
 
   display.setCursor(0, 11);
   display.drawBitmap(15, 11, temp, 30, 20, WHITE);
@@ -119,5 +113,4 @@ void loop() {
   display.print("min:");display.print(mintemp,1);
 
   display.display();
-  delay(2000);
 }
