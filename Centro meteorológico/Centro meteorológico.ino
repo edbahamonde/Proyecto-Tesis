@@ -7,8 +7,6 @@
 #include <DHT.h>
 #include <DHT_U.h>
 
-#include <U8g2lib.h>
-
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
 
@@ -23,8 +21,20 @@ const char* password = "13904906";
 int SENSOR = 2;
 float TEMPERATURA;
 float HUMEDAD;
+float maxtemp = 0;
+float mintemp = 100;
 
 DHT dht(SENSOR, DHT22);
+
+//icono de temperatura
+const unsigned char temp [] PROGMEM = {
+	0x00, 0x0f, 0x80, 0x00, 0x00, 0x1f, 0xc0, 0x00, 0x00, 0x3f, 0xe0, 0x00, 0x00, 0x7f, 0xf0, 0x00, 
+	0x07, 0xff, 0xfe, 0x00, 0x0f, 0xff, 0xff, 0x80, 0x1f, 0xff, 0xff, 0x80, 0x3f, 0xff, 0xff, 0xc0, 
+	0x3f, 0xff, 0xff, 0xc0, 0x3f, 0xff, 0xff, 0xc0, 0x3f, 0xff, 0xff, 0xf0, 0x7f, 0xff, 0xff, 0xf8, 
+	0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 
+	0xff, 0xff, 0xff, 0xfc, 0x7f, 0xff, 0xff, 0xfc, 0x3f, 0xff, 0xff, 0xf8, 0x1f, 0xff, 0xff, 0xe0
+};
+
 
 void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -32,7 +42,7 @@ void setup() {
   display.display();
 
   Serial.begin(9600);
-  
+
   dht.begin();
 
   //Titulo del circuito
@@ -45,36 +55,69 @@ void setup() {
 }
 
 void loop() {
-  
+
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
-  display.setCursor(0,0);
+  display.setCursor(0, 0);
   display.print("Centro Meteorologico");
 
   TEMPERATURA = dht.readTemperature();
   HUMEDAD = dht.readHumidity();
-  Serial.print("Temperatura: "); Serial.print(TEMPERATURA);
-  Serial.print("\tHumedad: "); Serial.print(HUMEDAD);
+
+  if (isnan(TEMPERATURA) || isnan(HUMEDAD)) {
+    display.setTextSize(1);
+    display.setCursor(0, 57);
+    display.print(F("Problema al leer DHT22"));
+    display.display();
+  }
+
+  if(TEMPERATURA > maxtemp){
+    maxtemp = TEMPERATURA;
+  }
+  if(TEMPERATURA < mintemp){
+    mintemp = TEMPERATURA;
+  }
+
+  Serial.print("Temperatura: ");
+  Serial.print(TEMPERATURA);
+  Serial.print("\tHumedad: ");
+  Serial.print(HUMEDAD);
   Serial.println();
 
-  // Clear the buffer.
-  
-  display.setTextSize(3);
-  //display.setTextColor(WHITE);
-  display.setCursor(0, 15);
-  //display.print("T: ");
+  /*u8g2.setFontDirection(0);
+  u8g2.setFont(u8g2_font_inb24_mf);
+  u8g2.drawStr(0, 15, "T"); --> No funcionó para mostrar letra mas grande*/
+
+  /*display.setTextSize(3);
+  display.setCursor(0, 11);
   display.print(TEMPERATURA, 0);
-  display.setCursor(64, 15);
+  display.setCursor(37, 11);
   display.setTextSize(2);
-  display.print("C");
+  display.print((char)247);
+  display.print("C");*/
+
+  display.setCursor(0, 11);
+  display.drawBitmap(15, 11, temp, 30, 20, WHITE);
+
   display.setTextSize(3);
-  display.setCursor(0, 30);
-  //display.print("H: ");
-  /*display.print(HUMEDAD, 0);
-  display.setCursor(64, 30);
+  display.setCursor(0, 35);  
+  display.print(TEMPERATURA, 0);
+  display.setCursor(37, 35);
   display.setTextSize(2);
-  display.print("%");*/
+  display.print((char)247);
+  display.print("C");
+
+  display.setTextSize(1);
+  display.setCursor(62, 12);  
+  display.print("Temperatura");
+
+  display.setTextSize(1);
+  display.setCursor(75, 26);  
+  display.print("max:");display.print(maxtemp,1);
+  display.setCursor(75, 41);  
+  display.print("min:");display.print(mintemp,1);
+
   display.display();
   delay(2000);
 }
