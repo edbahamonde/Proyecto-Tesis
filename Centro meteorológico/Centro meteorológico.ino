@@ -1,5 +1,6 @@
 //#include <ESP8266WiFi.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -7,7 +8,7 @@
 #include <DHT.h>
 #include <DHT_U.h>
 //Libería de SD
-//#include <SD.h>
+#include <SD.h>
 //librerías bmp280
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
@@ -39,7 +40,7 @@ int SUELO;
 float maxhs = 0;
 float minhs = 100;
 //Sensor de lluvia
-int lluviaAnalog = 35, lluviaDigital = 34, LLUVIANALOG, LLUVIADIGI, maxllu, minllu=100;
+int lluviaAnalog = 35, lluviaDigital = 34, LLUVIANALOG, LLUVIADIGI, maxllu, minllu = 100;
 //Sensor de luminosidad
 int SENSORLUZ = 13, LUZ;
 int maxluz = 0, minluz = 500;
@@ -51,32 +52,38 @@ float maxpres = 0, minpres = 500;
 #define BMP_SDA 21
 #define BMP_SCL 22
 Adafruit_BMP280 bmp280;
-int TEMP_BPM, mintemp_bpm = 500, maxtemp_bpm=0;
+int TEMP_BPM, mintemp_bpm = 500, maxtemp_bpm = 0;
 //Sensor de temperatura de agua
 #define SENSOR_PIN 15
 OneWire oneWire(SENSOR_PIN);
 DallasTemperature DS18B20(&oneWire);
 float TEMP_AGUA;  // temperature in Celsius
-float mintemp_agua=500, maxtemp_agua=0;
+float mintemp_agua = 500, maxtemp_agua = 0;
 float tempF;  // temperature in Fahrenheit
 //sensor de caudal
 int NumPulsos, CAUDAL = 32;
 float factor_conversion = 7.5, caudal_L_m;
-int frecuencia, mincaudal=500, maxcaudal=0, medidaIntervalo= 2500;
+int frecuencia, mincaudal = 500, maxcaudal = 0, medidaIntervalo = 2500;
 //sensores de luminosidad
-int SENSOR1_LUZ=33, SENSOR2_LUZ=25, minluz1_difusa=5, minluz1_reflejada=5, maxluz1_difusa=0, maxluz1_reflejada=0;
+int SENSOR1_LUZ = 33, SENSOR2_LUZ = 25, minluz1_difusa = 5, minluz1_reflejada = 5, maxluz1_difusa = 0, maxluz1_reflejada = 0;
+//Sdk
+#define CS_PIN 5
+String registro;
+long segundos = 0.0, minutos = 0.0, horas = 0.0;
+bool sd_iniciada;
+String nombreArchivo = "/dataESP32_A.txt";
+int contador = 0, linea = 0;
+byte caracter;
 
 DHT dht(SENSORT_H, DHT22);
 
-//Pin de SD Card CS
-#define CS_PIN 15
-int contador = 0;
+File sd_file;
 
 void ContarPulsos() {
   NumPulsos++;
 }
 
-int ObtenerFrecuencia() {  
+int ObtenerFrecuencia() {
   NumPulsos = 0;
   interrupts();
   delay(medidaIntervalo);
@@ -163,20 +170,20 @@ const unsigned char presion[] PROGMEM = {
   0x0f, 0x84, 0x20, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00
 };
 //icono de temperatura del agua
-const unsigned char tempagua [] PROGMEM = {
-	0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x30, 0x30, 0x00, 0x00, 0x30, 0x3b, 0xc7, 0x87, 0x70, 
-	0x1f, 0xff, 0xff, 0xe0, 0x1f, 0xff, 0xff, 0xe0, 0x1c, 0x10, 0x20, 0xe0, 0x18, 0x00, 0x00, 0x60, 
-	0x18, 0x1c, 0xe0, 0x60, 0x1c, 0x1c, 0xe0, 0xe0, 0x0c, 0x0c, 0xe0, 0xe0, 0x0c, 0x00, 0x00, 0xc0, 
-	0x0c, 0x1c, 0xe0, 0xc0, 0x0c, 0x1c, 0xe0, 0xc0, 0x0c, 0x0c, 0xc0, 0xc0, 0x0e, 0x00, 0x01, 0xc0, 
-	0x0e, 0x00, 0x01, 0xc0, 0x07, 0xff, 0xff, 0xc0, 0x07, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00
+const unsigned char tempagua[] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x30, 0x30, 0x00, 0x00, 0x30, 0x3b, 0xc7, 0x87, 0x70,
+  0x1f, 0xff, 0xff, 0xe0, 0x1f, 0xff, 0xff, 0xe0, 0x1c, 0x10, 0x20, 0xe0, 0x18, 0x00, 0x00, 0x60,
+  0x18, 0x1c, 0xe0, 0x60, 0x1c, 0x1c, 0xe0, 0xe0, 0x0c, 0x0c, 0xe0, 0xe0, 0x0c, 0x00, 0x00, 0xc0,
+  0x0c, 0x1c, 0xe0, 0xc0, 0x0c, 0x1c, 0xe0, 0xc0, 0x0c, 0x0c, 0xc0, 0xc0, 0x0e, 0x00, 0x01, 0xc0,
+  0x0e, 0x00, 0x01, 0xc0, 0x07, 0xff, 0xff, 0xc0, 0x07, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00
 };
 //icono caudal de agua
-const unsigned char iconCaudal [] PROGMEM = {
-	0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x07, 0x80, 0x00, 0x00, 0x03, 0xc0, 
-	0x00, 0x00, 0xff, 0xc0, 0x00, 0x01, 0xff, 0xc0, 0x00, 0x01, 0xc3, 0x80, 0x00, 0x03, 0x87, 0x00, 
-	0x00, 0x03, 0x06, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x01, 0xc3, 0x00, 0x00, 
-	0x07, 0xf3, 0x00, 0x00, 0x0f, 0xf3, 0x00, 0x00, 0x0f, 0xff, 0x00, 0x00, 0x0f, 0xfe, 0x00, 0x00, 
-	0x0f, 0xf8, 0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x07, 0xf0, 0x00, 0x00, 0x03, 0xe0, 0x00, 0x00
+const unsigned char iconCaudal[] PROGMEM = {
+  0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x07, 0x80, 0x00, 0x00, 0x03, 0xc0,
+  0x00, 0x00, 0xff, 0xc0, 0x00, 0x01, 0xff, 0xc0, 0x00, 0x01, 0xc3, 0x80, 0x00, 0x03, 0x87, 0x00,
+  0x00, 0x03, 0x06, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x01, 0xc3, 0x00, 0x00,
+  0x07, 0xf3, 0x00, 0x00, 0x0f, 0xf3, 0x00, 0x00, 0x0f, 0xff, 0x00, 0x00, 0x0f, 0xfe, 0x00, 0x00,
+  0x0f, 0xf8, 0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x07, 0xf0, 0x00, 0x00, 0x03, 0xe0, 0x00, 0x00
 };
 
 
@@ -191,9 +198,18 @@ void setup() {
   Wire.begin();
   boolean status = bmp280.begin(0x76);
 
-  if (!status) {
-    Serial.println("no conectado bpm");
+  if (SD.begin()) {
+    Serial.println("Se inició la tarjeta SD");
+    sd_iniciada = true;
+  } else {
+    Serial.println("No se pudo iniciar la tarjeta SD");
+    sd_iniciada = false;
+    return;
   }
+
+  /*if (!status) {
+    Serial.println("no conectado bpm");
+  }*/
 
   dht.begin();
   pinMode(lluviaDigital, INPUT);
@@ -202,19 +218,49 @@ void setup() {
 
   DS18B20.begin();
 
-  //Verifica la SD Card
-  /*if (!SD.begin(CS_PIN)) {
-    Serial.println("Problemas con existencia de tarjeta SD!");
-    return;
-  }
-  Serial.println("Tarjeta iniciada correctamente");*/
-
-  //Titulo del circuito
-  /*display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.print("Centro Meteorologico");*/
   display.display();
+  //*******************************************************
+  sd_file = SD.open(nombreArchivo, FILE_WRITE);
+  if (sd_file) {
+    sd_file.print("Id");
+    sd_file.print(",");
+    sd_file.print("Time");
+    sd_file.print(",");
+    sd_file.print("Temperatura");
+    sd_file.print(",");
+    sd_file.print("Humedad");
+    sd_file.print(",");
+    sd_file.print("TempSuelo");
+    sd_file.print(",");
+    sd_file.print("Lluvia");
+    sd_file.print(",");
+    sd_file.print("Luz");
+    sd_file.print(",");
+    sd_file.print("Altitud");
+    sd_file.print(",");
+    sd_file.print("Presion");
+    sd_file.print(",");
+    sd_file.print("TempAgua");
+    sd_file.print(",");
+    sd_file.print("FrecuenciaPulsos");
+    sd_file.print(",");
+    sd_file.println("Caudal");
+
+    sd_file.close();
+  }
+  //***************************************
+
+  /*
+  File testFile = SD.open("/SDTeasdddd.txt", FILE_WRITE);
+  if (testFile) {
+    testFile.println("Contenido");
+    testFile.close();
+    Serial.println("Success, data written to SDTd.txt");
+  } else {
+    Serial.println("Error, couldn't not open SDTd.txt");
+  }
+  */
+
   delay(1000);
 }
 
@@ -224,7 +270,14 @@ void loop() {
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0, 0);
-  display.print("C M");
+  display.print("D");
+  display.write(252);
+  display.setCursor(15, 0);
+  if (sd_iniciada) {
+    display.write(178);
+  } else {
+    display.write(168);
+  }
 
   TEMPERATURA = dht.readTemperature();
   HUMEDAD = dht.readHumidity();
@@ -239,12 +292,12 @@ void loop() {
   DS18B20.requestTemperatures();
   TEMP_AGUA = DS18B20.getTempCByIndex(0);
   //tempF = tempC * 9 / 5 + 32;
-  float frecuencia = ObtenerFrecuencia();             //obtenemos la Frecuencia de los pulsos en Hz
+  float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
   caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
   //float caudal_L_h = caudal_L_m * 60;                 //calculamos el caudal en L/h
-  
 
-  
+
+
 
   if (TEMPERATURA > maxtemp) {
     maxtemp = TEMPERATURA;
@@ -307,7 +360,7 @@ void loop() {
     mintemp_bpm = TEMP_BPM;
   }*/
 
-  valPot = map(analogRead(36), 0, 4095, 0, 8);
+  valPot = map(analogRead(36), 0, 4095, 0, 9);
 
   display.setCursor(84, 0);
   display.print("Op: ");
@@ -335,32 +388,36 @@ void loop() {
   if (valPot == 6) {
     presionS();
   }
-  if(valPot == 7){
+  if (valPot == 7) {
     tempAgua();
   }
-  if(valPot == 8){
+  if (valPot == 8) {
     caudalS();
   }
   /*if (valPot == 7) {
     temp_bpm();
   }*/
-  /*if (valPot == 2) {
+  if (valPot == 9) {
     //-----------TARJETA SD-----------
-    File dataFile = SD.open("Llog.txt", FILE_WRITE);
-    if (dataFile) {
-      Serial.println("Archivo abierto correctamente");
-      dataFile.print(contador);
-      dataFile.print(",");
-      dataFile.print(TEMPERATURA);
-      dataFile.print(",");
-      dataFile.print(HUMEDAD);
-      dataFile.close();
-      contador = contador + 1;
+    //*********************************************
+    mostrarTodo();
+    sd_file = SD.open(nombreArchivo, FILE_APPEND);
+    if (sd_file) {
+      //Lectura de líneas del archivo
+      /*while (sd_file.available()) {
+        caracter = sd_file.read();
+        if(caracter == 13){
+          linea++;
+        }
+      }*/
+      enviarDatos();
+      contador++;
     } else {
-      Serial.println("Falla al abrir el archivo");
+      Serial.println("Problema al enviar registros");
     }
-    delay(2000);
-  }*/
+    /*********************************************/
+    delay(1000);
+  }
 
   Serial.print(" ");
   Serial.print(contador);
@@ -395,6 +452,7 @@ void loop() {
   Serial.print("\tPotenciometro: ");
   Serial.print(valPot);
   Serial.println();
+
 
   delay(2000);
 }
@@ -511,7 +569,9 @@ void lluviaS() {
 
   display.setTextSize(1);
   display.setCursor(50, 12);
-  display.print("Precipitaci");display.write(162);display.print("n");
+  display.print("Precipitaci");
+  display.write(162);
+  display.print("n");
 
   display.setTextSize(1);
   display.setCursor(75, 26);
@@ -538,7 +598,7 @@ void luzS() {
   display.setTextSize(3);
   display.setCursor(0, 35);
   display.print(LUZ, 0);
-  display.setCursor(53, 35);  
+  display.setCursor(53, 35);
   display.setTextSize(1);
   display.print("ohm");
 
@@ -562,9 +622,9 @@ void altitudS() {
   display.setCursor(0, 11);
   display.drawBitmap(10, 11, altitud, 30, 20, WHITE);
 
-  if(ALTITUD >= 999){
+  if (ALTITUD >= 999) {
     display.setTextSize(1);
-  }else{
+  } else {
     display.setTextSize(3);
   }
   display.setCursor(0, 35);
@@ -593,9 +653,9 @@ void presionS() {
   display.setCursor(0, 11);
   display.drawBitmap(10, 11, presion, 30, 20, WHITE);
 
-  if ( PRESION >= 999){
+  if (PRESION >= 999) {
     display.setTextSize(1);
-  }else{
+  } else {
     display.setTextSize(3);
   }
   display.setCursor(0, 35);
@@ -606,7 +666,9 @@ void presionS() {
 
   display.setTextSize(1);
   display.setCursor(75, 12);
-  display.print("Presi");display.write(162);display.print("n");
+  display.print("Presi");
+  display.write(162);
+  display.print("n");
 
   display.setTextSize(1);
   display.setCursor(75, 26);
@@ -647,14 +709,14 @@ void presionS() {
   display.display();
 }*/
 
-void tempAgua(){
+void tempAgua() {
   conexTempAgua();
   display.setCursor(0, 11);
   display.drawBitmap(15, 11, tempagua, 30, 20, WHITE);
 
-  if(TEMP_AGUA >=99){
+  if (TEMP_AGUA >= 99) {
     display.setTextSize(1);
-  }else{
+  } else {
     display.setTextSize(3);
   }
   display.setCursor(0, 35);
@@ -679,13 +741,13 @@ void tempAgua(){
   display.display();
 }
 
-void caudalS(){
+void caudalS() {
   display.setCursor(0, 11);
   display.drawBitmap(15, 11, iconCaudal, 30, 20, WHITE);
 
-  if(caudal_L_m >= 99){
+  if (caudal_L_m >= 99) {
     display.setTextSize(1);
-  }else{
+  } else {
     display.setTextSize(3);
   }
   display.setCursor(0, 35);
@@ -709,7 +771,15 @@ void caudalS(){
   display.display();
 }
 
-void conexDTH22(){
+void mostrarTodo() {
+  display.setTextSize(1);
+  display.setCursor(0, 12);
+  display.print("Caudal:");
+  display.print(caudal_L_m, 0);
+  display.display();
+}
+
+void conexDTH22() {
   if (isnan(TEMPERATURA) || isnan(HUMEDAD)) {
     display.setTextSize(1);
     display.setCursor(0, 57);
@@ -718,7 +788,7 @@ void conexDTH22(){
   }
 }
 
-void conexHumeSuelo(){
+void conexHumeSuelo() {
   if (SUELO > 90) {
     display.setTextSize(1);
     display.setCursor(0, 57);
@@ -727,8 +797,8 @@ void conexHumeSuelo(){
   }
 }
 
-void conexLuz(){
-  if (LUZ == 0 || LUZ >= 2000){
+void conexLuz() {
+  if (LUZ == 0 || LUZ >= 2000) {
     display.setTextSize(1);
     display.setCursor(0, 57);
     display.print(F("Error sensor de luz"));
@@ -736,8 +806,8 @@ void conexLuz(){
   }
 }
 
-void conexBPM(){
-  if (isnan(ALTITUD)){
+void conexBPM() {
+  if (isnan(ALTITUD)) {
     display.setTextSize(1);
     display.setCursor(0, 57);
     display.print(F("Error sensor presion BPM"));
@@ -745,11 +815,27 @@ void conexBPM(){
   }
 }
 
-void conexTempAgua(){
-  if(TEMP_AGUA == -127){
+void conexTempAgua() {
+  if (TEMP_AGUA == -127) {
     display.setTextSize(1);
     display.setCursor(0, 57);
     display.print(F("Error sensor temp agua"));
     display.display();
   }
+}
+
+void enviarDatos() {
+  sd_file.print(
+    String(contador) + ", " + String(horas) + ":" + (minutos) + ":" + (segundos) + ", " + String(TEMPERATURA) + ", " + String(HUMEDAD) + ", " + String(SUELO) + ", " + String(LLUVIANALOG) + ", " + String(LUZ) + ", " + String(ALTITUD) + ", " + String(PRESION) + ", " + String(TEMP_AGUA) + ", " + String(frecuencia) + ", " + String(caudal_L_m) + "\n");
+
+  if (segundos >= 58) {
+    minutos++;
+  }
+  if (minutos > 59) {
+    horas++;
+    minutos = 0;
+  }
+
+  delay(2000);
+  sd_file.close();
 }
