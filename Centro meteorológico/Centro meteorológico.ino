@@ -75,6 +75,8 @@ String nombreArchivo = "/dataESP32_A.txt";
 int contador = 0, linea = 0;
 byte caracter;
 
+int sonido = 26;
+
 DHT dht(SENSORT_H, DHT22);
 
 File sd_file;
@@ -272,12 +274,6 @@ void loop() {
   display.setCursor(0, 0);
   display.print("D");
   display.write(252);
-  display.setCursor(15, 0);
-  if (sd_iniciada) {
-    display.write(178);
-  } else {
-    display.write(168);
-  }
 
   TEMPERATURA = dht.readTemperature();
   HUMEDAD = dht.readHumidity();
@@ -368,7 +364,11 @@ void loop() {
   display.print(valPot);
 
   if (valPot == 0) {
-    temperatura();
+    //-----------TARJETA SD-----------
+    //*********************************************
+    mostrarTodo();
+
+    enviarSD();
   }
   if (valPot == 1) {
     humedad();
@@ -392,31 +392,13 @@ void loop() {
     tempAgua();
   }
   if (valPot == 8) {
-    caudalS();
+    temperatura();
   }
   /*if (valPot == 7) {
     temp_bpm();
   }*/
   if (valPot == 9) {
-    //-----------TARJETA SD-----------
-    //*********************************************
-    mostrarTodo();
-    sd_file = SD.open(nombreArchivo, FILE_APPEND);
-    if (sd_file) {
-      //Lectura de líneas del archivo
-      /*while (sd_file.available()) {
-        caracter = sd_file.read();
-        if(caracter == 13){
-          linea++;
-        }
-      }*/
-      enviarDatos();
-      contador++;
-    } else {
-      Serial.println("Problema al enviar registros");
-    }
-    /*********************************************/
-    delay(1000);
+    caudalS();
   }
 
   Serial.print(" ");
@@ -454,7 +436,7 @@ void loop() {
   Serial.println();
 
 
-  delay(2000);
+  delay(10000);
 }
 
 void temperatura() {
@@ -773,9 +755,47 @@ void caudalS() {
 
 void mostrarTodo() {
   display.setTextSize(1);
+
   display.setCursor(0, 12);
-  display.print("Caudal:");
+  display.print("T:");
+  display.print(TEMPERATURA, 0);
+
+  display.setCursor(0, 22);
+  display.print("H:");
+  display.print(HUMEDAD, 0);
+
+  display.setCursor(0, 32);
+  display.print("HS:");
+  display.print(SUELO, 0);
+
+  display.setCursor(0, 42);
+  display.print("LL:");
+  display.print(LLUVIANALOG, 0);
+
+  display.setCursor(0, 52);
+  display.print("LU:");
+  display.print(LUZ, 0);
+
+  display.setCursor(60, 12);
+  display.print("AL:");
+  display.print(ALTITUD, 0);
+
+  display.setCursor(60, 22);
+  display.print("P:");
+  display.print(PRESION, 0);
+
+  display.setCursor(60, 32);
+  display.print("TA:");
+  display.print(TEMP_BPM, 0);
+
+  display.setCursor(60, 42);
+  display.print("Fr:");
+  display.print(frecuencia, 0);
+
+  display.setCursor(60, 39);
+  display.print("Ca:");
   display.print(caudal_L_m, 0);
+
   display.display();
 }
 
@@ -824,6 +844,30 @@ void conexTempAgua() {
   }
 }
 
+void enviarSD() {
+  display.setCursor(20, 0);
+  sd_file = SD.open(nombreArchivo, FILE_APPEND);
+  if (sd_file) {
+    //Lectura de líneas del archivo
+    /*while (sd_file.available()) {
+        caracter = sd_file.read();
+        if(caracter == 13){
+          linea++;
+        }
+      }*/
+    enviarDatos();
+    contador++;
+    display.setTextSize(1);
+    display.write(24);
+  } else {
+    display.setTextSize(1);
+    display.print("X");
+    Serial.println("Problema al enviar registros");
+  }
+  display.display();
+  /*********************************************/
+}
+
 void enviarDatos() {
   sd_file.print(
     String(contador) + ", " + String(horas) + ":" + (minutos) + ":" + (segundos) + ", " + String(TEMPERATURA) + ", " + String(HUMEDAD) + ", " + String(SUELO) + ", " + String(LLUVIANALOG) + ", " + String(LUZ) + ", " + String(ALTITUD) + ", " + String(PRESION) + ", " + String(TEMP_AGUA) + ", " + String(frecuencia) + ", " + String(caudal_L_m) + "\n");
@@ -835,7 +879,5 @@ void enviarDatos() {
     horas++;
     minutos = 0;
   }
-
-  delay(2000);
   sd_file.close();
 }
