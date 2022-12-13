@@ -80,11 +80,12 @@ byte caracter;
 int countTime = 0;
 //MENU
 int pic = 0;
-int maxPics_L1 = 5;
-int maxPics_L2 = 3;
+int maxPics_L1 = 4;
+int maxPics_L2 = 2;
 int button_brd = 14;
 long lastmillis = 0;
 long maxtime = 30000;
+String tipoModalidad = "";
 
 OneButton button(button_brd, true);
 
@@ -227,13 +228,60 @@ void setup() {
 
 void loop() {
 
-  display.clearDisplay();
+  button.tick();
 
-  iniciaVariables();
+  //iniciaVariables(); -->Se demora y afecta el conteo del botón
 
-  header();
+  if (millis() >= (lastmillis + maxtime) && pic != 116) {
+    pic = 0;
+  }
 
-  minmaxVal();
+  Serial.println(pic);
+
+  //Capa 1
+  if (pic == 0) {
+    header();
+    display.setCursor(0, 11);
+    display.setTextSize(1);
+    display.print("Por favor escoja la modalidad de trabajo del CM");
+    refresh();
+  }
+  menuInicial();
+  //Capa 2
+  if (pic == 11 || pic == 12 || pic == 13) {
+    header();
+    menuCapa2(pic, 29);
+  }
+  if (pic == 21 || pic == 22 || pic == 23) {
+    header();
+    opcionesA_C(tipoModalidad);
+    display.setCursor(0, 47);
+    display.print(">");
+    refresh();
+  }
+  //acepta capa 2
+  if (pic == 111 || pic == 112 || pic == 113) {
+    if (pic == 111) {
+      pic = 116;
+      while (pic == 116) {
+        button.tick();
+        almacenamientoLocal();
+        delay(1000);
+        pic = 111; //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir        
+      }
+    }
+  }
+  if (pic == 121 || pic == 122 || pic == 123) {
+    pic = 1;
+    refresh();
+  }
+  if (pic == 14) {
+    info();
+    refresh();
+  }
+  //
+
+  /*minmaxVal();
 
   if (valPot == 0) {
     mostrarTodo();
@@ -298,6 +346,7 @@ void loop() {
   Serial.print("\tPotenciometro: ");
   Serial.print(valPot);
   Serial.println();
+  */
 }
 
 void ContarPulsos() {
@@ -854,9 +903,9 @@ void click() {
   }
 
   if (pic >= 10 && pic < 100) {
-    if (pic > 30) {
+    if (pic > maxPics_L2 * 10) {
       pic = 11;
-    } else if (pic < 30) {
+    } else if (pic < maxPics_L2 * 10) {
       pic = pic + 10;
     }
   }
@@ -864,17 +913,20 @@ void click() {
 
 void doubleclick() {
   lastmillis = millis();
-  if (pic == 11 || pic == 21 || pic == 31) pic = 1;
-  if (pic == 12) pic = 2;
-  if (pic == 13) pic = 3;
-  if (pic == 14) pic = 4;
-  if (pic == 15) pic = 5;
+  if (pic == 11 || pic == 21 || pic == 111) pic = 1;
+  if (pic == 12 || pic == 22 || pic == 112) pic = 2;
+  if (pic == 13 || pic == 23 || pic == 113) pic = 3;
+  if (pic == 14 || pic == 24 || pic == 114) pic = 4;
+
+  if (pic == 116) pic = 1;
 }
 
 void longPressStart() {
   lastmillis = millis();
-  if (pic > 0 & pic < 10) {
+  if (pic >= 1 && pic < 5) {
     pic = pic + 10;
+  } else if (pic > 10 && pic < 25) {
+    pic = pic + 100;
   }
 }
 
@@ -886,4 +938,95 @@ void refresh() {
   display.display();
   delay(00);
   display.clearDisplay();
+}
+
+void menuInicial() {
+  if (pic == 1) {
+    header();
+    opciones();
+    display.setCursor(0, 20);
+    display.print(">");
+    refresh();
+  }
+  if (pic == 2) {
+    header();
+    opciones();
+    display.setCursor(0, 29);
+    display.print(">");
+    refresh();
+  }
+  if (pic == 3) {
+    header();
+    opciones();
+    display.setCursor(0, 38);
+    display.print(">");
+    refresh();
+  }
+  if (pic == 4) {
+    header();
+    opciones();
+    display.setCursor(0, 56);
+    display.print(">");
+    refresh();
+  }
+}
+
+void opciones() {
+  display.setCursor(0, 11);
+  display.print("Men");
+  display.write(151);
+  display.print(" de Opciones");
+  display.setCursor(0, 20);
+  display.print(" LOCAL");
+  display.setCursor(0, 29);
+  display.print(" Wi-Fi");
+  display.setCursor(0, 38);
+  display.print(" GSM");
+  display.setCursor(0, 56);
+  display.print(" INFO");
+}
+
+void opcionesA_C(String tipoModalidad) {
+  display.setCursor(0, 11);
+  display.print("Almacenamiento " + tipoModalidad);
+  display.setCursor(0, 29);
+  display.print(" EMPEZAR");
+  display.setCursor(0, 47);
+  display.print(" CANCELAR");
+}
+
+void menuCapa2(int pico, int y) {
+  if (pico == 11) {
+    tipoModalidad = "Local";
+    opcionesA_C(tipoModalidad);
+  }
+  if (pico == 12) {
+    tipoModalidad = "Wi-Fi";
+    opcionesA_C(tipoModalidad);
+  }
+  if (pico == 13) {
+    tipoModalidad = "GSM";
+    opcionesA_C(tipoModalidad);
+  }
+  display.setCursor(0, y);
+  display.print(">");
+  refresh();
+}
+
+void info() {
+  display.setCursor(0, 15);
+  display.print("Realizado por:");
+  display.setCursor(0, 24);
+  display.print("-> Dayan Puetate y");
+  display.setCursor(0, 33);
+  display.print("-> Ernesto Bahamonde");
+}
+
+void almacenamientoLocal() {
+  header();
+  display.setCursor(0, 32);
+  display.print("Empez");
+  display.write(162);
+  display.print(" almacenamiento " + tipoModalidad + "!");
+  refresh();
 }
