@@ -15,6 +15,8 @@
 //librería dsb
 #include <OneWire.h>
 #include <DallasTemperature.h>
+// librería para el menú
+#include <OneButton.h>
 
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
@@ -74,8 +76,17 @@ bool sd_iniciada;
 String nombreArchivo = "/dataESP32_B.txt";
 int contador = 0, linea = 0;
 byte caracter;
+//para el tiempo en ejecución -> para el guardado de datos
+int countTime = 0;
+//MENU
+int pic = 0;
+int maxPics_L1 = 5;
+int maxPics_L2 = 3;
+int button_brd = 14;
+long lastmillis = 0;
+long maxtime = 30000;
 
-int sonido = 26;
+OneButton button(button_brd, true);
 
 DHT dht(SENSORT_H, DHT22);
 
@@ -180,7 +191,6 @@ const unsigned char iconCaudal[] PROGMEM = {
 void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
-  display.display();
 
   Serial.begin(9600);
 
@@ -207,134 +217,27 @@ void setup() {
 
   DS18B20.begin();
 
-  display.display();
-  
-  sd_file = SD.open(nombreArchivo, FILE_WRITE);
-  if (sd_file) {
-    sd_file.print("Id");
-    sd_file.print(",");
-    sd_file.print("Time");
-    sd_file.print(",");
-    sd_file.print("Temperatura");
-    sd_file.print(",");
-    sd_file.print("Humedad");
-    sd_file.print(",");
-    sd_file.print("TempSuelo");
-    sd_file.print(",");
-    sd_file.print("Lluvia");
-    sd_file.print(",");
-    sd_file.print("Luz");
-    sd_file.print(",");
-    sd_file.print("Altitud");
-    sd_file.print(",");
-    sd_file.print("Presion");
-    sd_file.print(",");
-    sd_file.print("TempAgua");
-    sd_file.print(",");
-    sd_file.print("FrecuenciaPulsos");
-    sd_file.print(",");
-    sd_file.println("Caudal");
+  button.attachClick(click);
+  button.attachDoubleClick(doubleclick);
+  button.attachLongPressStop(longPressStop);
+  button.attachLongPressStart(longPressStart);
 
-    sd_file.close();
-  }
-
-  delay(1000);
+  headerArchivo();
 }
 
 void loop() {
 
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  display.print("D");
-  display.write(252);
-  display.drawLine(0, 9, 128, 9, WHITE);
 
-  TEMPERATURA = dht.readTemperature();
-  HUMEDAD = dht.readHumidity();
-  SUELO = map(analogRead(SENSOR_HS), 0, 4095, 100, 0);
-  LLUVIANALOG = map(analogRead(lluviaAnalog), 0, 4095, 100, 0);
-  LLUVIADIGI = digitalRead(lluviaDigital);
-  LUZ = analogRead(SENSORLUZ);
-  ALTITUD = bmp280.readAltitude(1011.18);
-  PRESION = (bmp280.readPressure() / 100);
-  //TEMP_BPM = bmp280.readTemperature(); Ya existe temperatura
+  iniciaVariables();
 
-  DS18B20.requestTemperatures();
-  TEMP_AGUA = DS18B20.getTempCByIndex(0);
-  //tempF = tempC * 9 / 5 + 32;
-  float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
-  caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
+  header();
 
-
-
-
-  if (TEMPERATURA > maxtemp) {
-    maxtemp = TEMPERATURA;
-  }
-  if (TEMPERATURA < mintemp) {
-    mintemp = TEMPERATURA;
-  }
-  if (HUMEDAD > maxhum) {
-    maxhum = HUMEDAD;
-  }
-  if (HUMEDAD < minhum) {
-    minhum = HUMEDAD;
-  }
-  if (SUELO > maxhs) {
-    maxhs = SUELO;
-  }
-  if (SUELO < minhs) {
-    minhs = SUELO;
-  }
-  if (LLUVIANALOG > maxllu) {
-    maxllu = LLUVIANALOG;
-  }
-  if (LLUVIANALOG < minllu) {
-    minllu = LLUVIANALOG;
-  }
-  if (LUZ > maxluz) {
-    maxluz = LUZ;
-  }
-  if (LUZ < minluz) {
-    minluz = LUZ;
-  }
-  if (ALTITUD > maxalti) {
-    maxalti = ALTITUD;
-  }
-  if (ALTITUD < minalti) {
-    minalti = ALTITUD;
-  }
-  if (PRESION > maxpres) {
-    maxpres = PRESION;
-  }
-  if (PRESION < minpres) {
-    minpres = PRESION;
-  }
-  if (TEMP_AGUA > maxtemp_agua) {
-    maxtemp_agua = TEMP_AGUA;
-  }
-  if (TEMP_AGUA < mintemp_agua) {
-    mintemp_agua = TEMP_AGUA;
-  }
-  if (caudal_L_m > maxcaudal) {
-    maxcaudal = caudal_L_m;
-  }
-  if (caudal_L_m < mincaudal) {
-    mincaudal = caudal_L_m;
-  }
-
-  valPot = map(analogRead(36), 0, 4095, 0, 9);
-
-  display.setCursor(84, 0);
-  display.print("Op: ");
-  display.setCursor(106, 0);
-  display.print(valPot);
+  minmaxVal();
 
   if (valPot == 0) {
     mostrarTodo();
-    enviarSD();
+    //enviarSD();
   }
   if (valPot == 1) {
     humedad();
@@ -395,8 +298,6 @@ void loop() {
   Serial.print("\tPotenciometro: ");
   Serial.print(valPot);
   Serial.println();
-
-  delay(10000);
 }
 
 void ContarPulsos() {
@@ -818,4 +719,171 @@ void enviarDatos() {
     minutos = 0;
   }
   sd_file.close();
+}
+
+void headerArchivo() {
+  sd_file = SD.open(nombreArchivo, FILE_WRITE);
+  if (sd_file) {
+    sd_file.print("Id");
+    sd_file.print(",");
+    sd_file.print("Time");
+    sd_file.print(",");
+    sd_file.print("Temperatura");
+    sd_file.print(",");
+    sd_file.print("Humedad");
+    sd_file.print(",");
+    sd_file.print("TempSuelo");
+    sd_file.print(",");
+    sd_file.print("Lluvia");
+    sd_file.print(",");
+    sd_file.print("Luz");
+    sd_file.print(",");
+    sd_file.print("Altitud");
+    sd_file.print(",");
+    sd_file.print("Presion");
+    sd_file.print(",");
+    sd_file.print("TempAgua");
+    sd_file.print(",");
+    sd_file.print("FrecuenciaPulsos");
+    sd_file.print(",");
+    sd_file.println("Caudal");
+
+    sd_file.close();
+  }
+}
+
+void header() {
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.print("D");
+  display.write(252);
+  display.drawLine(0, 9, 128, 9, WHITE);
+
+  display.setCursor(84, 0);
+  display.print("Op: ");
+  display.setCursor(106, 0);
+  display.print(valPot);
+}
+
+void iniciaVariables() {
+  TEMPERATURA = dht.readTemperature();
+  HUMEDAD = dht.readHumidity();
+  SUELO = map(analogRead(SENSOR_HS), 0, 4095, 100, 0);
+  LLUVIANALOG = map(analogRead(lluviaAnalog), 0, 4095, 100, 0);
+  LLUVIADIGI = digitalRead(lluviaDigital);
+  LUZ = analogRead(SENSORLUZ);
+  ALTITUD = bmp280.readAltitude(1011.18);
+  PRESION = (bmp280.readPressure() / 100);
+  //TEMP_BPM = bmp280.readTemperature(); Ya existe temperatura
+
+  DS18B20.requestTemperatures();
+  TEMP_AGUA = DS18B20.getTempCByIndex(0);
+  //tempF = tempC * 9 / 5 + 32;
+  float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
+  caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
+
+  valPot = map(analogRead(36), 0, 4095, 0, 9);
+}
+
+void minmaxVal() {
+  if (TEMPERATURA > maxtemp) {
+    maxtemp = TEMPERATURA;
+  }
+  if (TEMPERATURA < mintemp) {
+    mintemp = TEMPERATURA;
+  }
+  if (HUMEDAD > maxhum) {
+    maxhum = HUMEDAD;
+  }
+  if (HUMEDAD < minhum) {
+    minhum = HUMEDAD;
+  }
+  if (SUELO > maxhs) {
+    maxhs = SUELO;
+  }
+  if (SUELO < minhs) {
+    minhs = SUELO;
+  }
+  if (LLUVIANALOG > maxllu) {
+    maxllu = LLUVIANALOG;
+  }
+  if (LLUVIANALOG < minllu) {
+    minllu = LLUVIANALOG;
+  }
+  if (LUZ > maxluz) {
+    maxluz = LUZ;
+  }
+  if (LUZ < minluz) {
+    minluz = LUZ;
+  }
+  if (ALTITUD > maxalti) {
+    maxalti = ALTITUD;
+  }
+  if (ALTITUD < minalti) {
+    minalti = ALTITUD;
+  }
+  if (PRESION > maxpres) {
+    maxpres = PRESION;
+  }
+  if (PRESION < minpres) {
+    minpres = PRESION;
+  }
+  if (TEMP_AGUA > maxtemp_agua) {
+    maxtemp_agua = TEMP_AGUA;
+  }
+  if (TEMP_AGUA < mintemp_agua) {
+    mintemp_agua = TEMP_AGUA;
+  }
+  if (caudal_L_m > maxcaudal) {
+    maxcaudal = caudal_L_m;
+  }
+  if (caudal_L_m < mincaudal) {
+    mincaudal = caudal_L_m;
+  }
+}
+
+void click() {
+  lastmillis = millis();
+  if (pic >= 0 && pic < 10) {
+    if (pic >= maxPics_L1) {
+      pic = 1;
+    } else if (pic < maxPics_L1) {
+      pic++;
+    }
+  }
+
+  if (pic >= 10 && pic < 100) {
+    if (pic > 30) {
+      pic = 11;
+    } else if (pic < 30) {
+      pic = pic + 10;
+    }
+  }
+}
+
+void doubleclick() {
+  lastmillis = millis();
+  if (pic == 11 || pic == 21 || pic == 31) pic = 1;
+  if (pic == 12) pic = 2;
+  if (pic == 13) pic = 3;
+  if (pic == 14) pic = 4;
+  if (pic == 15) pic = 5;
+}
+
+void longPressStart() {
+  lastmillis = millis();
+  if (pic > 0 & pic < 10) {
+    pic = pic + 10;
+  }
+}
+
+void longPressStop() {
+  ;
+}
+
+void refresh() {
+  display.display();
+  delay(00);
+  display.clearDisplay();
 }
