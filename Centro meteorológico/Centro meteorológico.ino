@@ -71,7 +71,7 @@ int SENSOR1_LUZ = 33, SENSOR2_LUZ = 25, minluz1_difusa = 5, minluz1_reflejada = 
 String registro;
 long segundos = 0.0, minutos = 0.0, horas = 0.0;
 bool sd_iniciada;
-String nombreArchivo = "/dataESP32_A.txt";
+String nombreArchivo = "/dataESP32_B.txt";
 int contador = 0, linea = 0;
 byte caracter;
 
@@ -80,19 +80,6 @@ int sonido = 26;
 DHT dht(SENSORT_H, DHT22);
 
 File sd_file;
-
-void ContarPulsos() {
-  NumPulsos++;
-}
-
-int ObtenerFrecuencia() {
-  NumPulsos = 0;
-  interrupts();
-  delay(medidaIntervalo);
-  noInterrupts();
-
-  return (float)NumPulsos * 1000 / medidaIntervalo;
-}
 
 //icono de temperatura
 const unsigned char temp[] PROGMEM = {
@@ -221,7 +208,7 @@ void setup() {
   DS18B20.begin();
 
   display.display();
-  //*******************************************************
+  
   sd_file = SD.open(nombreArchivo, FILE_WRITE);
   if (sd_file) {
     sd_file.print("Id");
@@ -250,18 +237,6 @@ void setup() {
 
     sd_file.close();
   }
-  //***************************************
-
-  /*
-  File testFile = SD.open("/SDTeasdddd.txt", FILE_WRITE);
-  if (testFile) {
-    testFile.println("Contenido");
-    testFile.close();
-    Serial.println("Success, data written to SDTd.txt");
-  } else {
-    Serial.println("Error, couldn't not open SDTd.txt");
-  }
-  */
 
   delay(1000);
 }
@@ -274,6 +249,7 @@ void loop() {
   display.setCursor(0, 0);
   display.print("D");
   display.write(252);
+  display.drawLine(0, 9, 128, 9, WHITE);
 
   TEMPERATURA = dht.readTemperature();
   HUMEDAD = dht.readHumidity();
@@ -290,7 +266,6 @@ void loop() {
   //tempF = tempC * 9 / 5 + 32;
   float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
   caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
-  //float caudal_L_h = caudal_L_m * 60;                 //calculamos el caudal en L/h
 
 
 
@@ -349,12 +324,6 @@ void loop() {
   if (caudal_L_m < mincaudal) {
     mincaudal = caudal_L_m;
   }
-  /*if (TEMP_BPM > maxtemp_bpm) {
-    maxtemp_bpm = TEMP_BPM;
-  }
-  if (TEMP_BPM < mintemp_bpm) {
-    mintemp_bpm = TEMP_BPM;
-  }*/
 
   valPot = map(analogRead(36), 0, 4095, 0, 9);
 
@@ -364,10 +333,7 @@ void loop() {
   display.print(valPot);
 
   if (valPot == 0) {
-    //-----------TARJETA SD-----------
-    //*********************************************
     mostrarTodo();
-
     enviarSD();
   }
   if (valPot == 1) {
@@ -394,9 +360,6 @@ void loop() {
   if (valPot == 8) {
     temperatura();
   }
-  /*if (valPot == 7) {
-    temp_bpm();
-  }*/
   if (valPot == 9) {
     caudalS();
   }
@@ -429,14 +392,24 @@ void loop() {
   Serial.print(" Hz\tCaudal: ");
   Serial.print(caudal_L_m, 3);
   Serial.print(" L/min");
-  //Serial.print(caudal_L_h, 3);
-  //Serial.println("L/h");
   Serial.print("\tPotenciometro: ");
   Serial.print(valPot);
   Serial.println();
 
-
   delay(10000);
+}
+
+void ContarPulsos() {
+  NumPulsos++;
+}
+
+int ObtenerFrecuencia() {
+  NumPulsos = 0;
+  interrupts();
+  delay(medidaIntervalo);
+  noInterrupts();
+
+  return (float)NumPulsos * 1000 / medidaIntervalo;
 }
 
 void temperatura() {
@@ -663,34 +636,6 @@ void presionS() {
   display.display();
 }
 
-/*void temp_bpm(){
-  conexBPM();
-  display.setCursor(0, 11);
-  display.drawBitmap(15, 11, temp, 30, 20, WHITE);
-
-  display.setTextSize(3);
-  display.setCursor(0, 35);
-  display.print(TEMP_BPM, 0);
-  display.setCursor(37, 35);
-  display.setTextSize(2);
-  display.print((char)247);
-  display.print("C");
-
-  display.setTextSize(1);
-  display.setCursor(62, 12);
-  display.print("Temp BMP280");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxtemp_bpm, 1);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(mintemp_bpm, 1);
-
-  display.display();
-}*/
-
 void tempAgua() {
   conexTempAgua();
   display.setCursor(0, 11);
@@ -792,7 +737,7 @@ void mostrarTodo() {
   display.print("Fr:");
   display.print(frecuencia, 0);
 
-  display.setCursor(60, 39);
+  display.setCursor(60, 52);
   display.print("Ca:");
   display.print(caudal_L_m, 0);
 
@@ -848,13 +793,6 @@ void enviarSD() {
   display.setCursor(20, 0);
   sd_file = SD.open(nombreArchivo, FILE_APPEND);
   if (sd_file) {
-    //Lectura de líneas del archivo
-    /*while (sd_file.available()) {
-        caracter = sd_file.read();
-        if(caracter == 13){
-          linea++;
-        }
-      }*/
     enviarDatos();
     contador++;
     display.setTextSize(1);
