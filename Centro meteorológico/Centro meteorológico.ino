@@ -73,9 +73,11 @@ int SENSOR1_LUZ = 33, SENSOR2_LUZ = 25, minluz1_difusa = 5, minluz1_reflejada = 
 String registro;
 long segundos = 0.0, minutos = 0.0, horas = 0.0;
 bool sd_iniciada;
-String nombreArchivo = "/dataESP32_B.txt";
+String nombreArchivo = "/dataESP32_C.txt";
 int contador = 0, linea = 0;
 byte caracter;
+int cabeceraCreada = 0;
+int tiemporecoleccion = 191;  //~2min->37 |~5min->97 |~10min->191  | 15min ->    PUEDE SER REEMPLAZADO CON TIEMPOS CON LA HORA
 //para el tiempo en ejecución -> para el guardado de datos
 int countTime = 0;
 //MENU
@@ -204,7 +206,7 @@ void setup() {
   } else {
     Serial.println("No se pudo iniciar la tarjeta SD");
     sd_iniciada = false;
-    return;
+    //return; --> Hace que el programa no funcione correctamente
   }
 
   /*if (!status) {
@@ -222,15 +224,11 @@ void setup() {
   button.attachDoubleClick(doubleclick);
   button.attachLongPressStop(longPressStop);
   button.attachLongPressStart(longPressStart);
-
-  headerArchivo();
 }
 
 void loop() {
 
   button.tick();
-
-  //iniciaVariables(); -->Se demora y afecta el conteo del botón
 
   if (millis() >= (lastmillis + maxtime) && pic != 116) {
     pic = 0;
@@ -262,12 +260,31 @@ void loop() {
   //acepta capa 2
   if (pic == 111 || pic == 112 || pic == 113) {
     if (pic == 111) {
-      pic = 116;
-      while (pic == 116) {
-        button.tick();
+      pic = 116;  //Para salir
+      while (pic != 111) {
         almacenamientoLocal();
-        delay(1000);
-        pic = 111; //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir        
+      }
+    }else
+    if (pic == 112) {
+      pic = 116; 
+      while(pic != 112){
+        refresh();
+        display.setCursor(0, 15);
+        display.setTextSize(1);
+        display.print("Iniciando almacenamiento Wifi");
+        delay(2000);
+        pic = 112;
+      }
+    }else 
+    if (pic == 113) {
+      pic = 116; 
+      while(pic != 113){
+        refresh();
+        display.setCursor(0, 15);
+        display.setTextSize(1);
+        display.print("Iniciando almacenamiento GSM");
+        delay(2000);
+        pic = 113;
       }
     }
   }
@@ -279,74 +296,6 @@ void loop() {
     info();
     refresh();
   }
-  //
-
-  /*minmaxVal();
-
-  if (valPot == 0) {
-    mostrarTodo();
-    //enviarSD();
-  }
-  if (valPot == 1) {
-    humedad();
-  }
-  if (valPot == 2) {
-    humeSuelo();
-  }
-  if (valPot == 3) {
-    lluviaS();
-  }
-  if (valPot == 4) {
-    luzS();
-  }
-  if (valPot == 5) {
-    altitudS();
-  }
-  if (valPot == 6) {
-    presionS();
-  }
-  if (valPot == 7) {
-    tempAgua();
-  }
-  if (valPot == 8) {
-    temperatura();
-  }
-  if (valPot == 9) {
-    caudalS();
-  }
-
-  Serial.print(" ");
-  Serial.print(contador);
-  Serial.print(" ::");
-  Serial.print("Temperatura: ");
-  Serial.print(TEMPERATURA);
-  Serial.print("\tHumedad: ");
-  Serial.print(HUMEDAD);
-  Serial.print("\tHumedad Suelo: ");
-  Serial.print(SUELO);
-  Serial.print("\tLluvia D: ");
-  Serial.print(LLUVIADIGI);
-  Serial.print("\tLluvia A: ");
-  Serial.print(LLUVIANALOG);
-  Serial.print("\tLuz: ");
-  Serial.print(LUZ);
-  Serial.print("\tAltitud: ");
-  Serial.print(ALTITUD);
-  Serial.print("\tPresion: ");
-  Serial.print(PRESION);
-  Serial.print("\tTEMP_BPM: ");
-  Serial.print(TEMP_BPM);
-  Serial.print("\tTemp Agua: ");
-  Serial.print(TEMP_AGUA);
-  Serial.print("FrecuenciaPulsos: ");
-  Serial.print(frecuencia, 0);
-  Serial.print(" Hz\tCaudal: ");
-  Serial.print(caudal_L_m, 3);
-  Serial.print(" L/min");
-  Serial.print("\tPotenciometro: ");
-  Serial.print(valPot);
-  Serial.println();
-  */
 }
 
 void ContarPulsos() {
@@ -362,288 +311,137 @@ int ObtenerFrecuencia() {
   return (float)NumPulsos * 1000 / medidaIntervalo;
 }
 
-void temperatura() {
-  conexDTH22();
+void mostrarDatos(int valorSensor, String nombre, int max, int min) {
   display.setCursor(0, 11);
-  display.drawBitmap(15, 11, temp, 30, 20, WHITE);
-
-  display.setTextSize(3);
-  display.setCursor(0, 35);
-  display.print(TEMPERATURA, 0);
-  display.setCursor(37, 35);
-  display.setTextSize(2);
-  display.print((char)247);
-  display.print("C");
-
-  display.setTextSize(1);
-  display.setCursor(62, 12);
-  display.print("Temperatura");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxtemp, 1);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(mintemp, 1);
-
-  display.display();
-}
-
-void humedad() {
-  conexDTH22();
-  display.setCursor(0, 11);
-  display.drawBitmap(15, 11, hum, 30, 20, WHITE);
-
-  display.setTextSize(3);
-  display.setCursor(0, 35);
-  display.print(HUMEDAD, 0);
-  if (HUMEDAD >= 99.8) {
-    display.setCursor(55, 35);
-  } else {
+  if (nombre == "Temperatura") {
+    conexDTH22();
+    display.drawBitmap(15, 11, temp, 30, 20, WHITE);
+    display.setTextSize(2);
     display.setCursor(37, 35);
-  }
-  display.setTextSize(2);
-  display.print("%");
+    display.print((char)247);
+    display.print("C");
+    display.setTextSize(3);
+  } else if (nombre == "Humedad") {
+    conexDTH22();
+    display.drawBitmap(15, 11, hum, 30, 20, WHITE);
+    if (HUMEDAD >= 100) {
+      display.setCursor(55, 35);
+    } else {
+      display.setCursor(37, 35);
+    }
+    display.setTextSize(2);
+    display.print("%");
+    display.setTextSize(3);
+  } else if (nombre == "Humedad suelo") {
+    conexHumeSuelo();
+    display.drawBitmap(10, 11, humSuelo, 30, 20, WHITE);
+    if (SUELO == 100) {
+      display.setCursor(55, 35);
+    } else {
+      display.setCursor(37, 35);
+    }
+    display.setTextSize(2);
+    display.print("%");
+    display.setTextSize(3);
+  } else if (nombre == "Pluviosidad") {
+    if (valorSensor == 0) {
+      display.drawBitmap(15, 11, lluvia, 30, 20, WHITE);
+    } else {
+      display.drawBitmap(15, 11, nube, 30, 20, WHITE);
+    }
+    if (LLUVIANALOG == 100) {
+      display.setCursor(55, 35);
+    } else {
+      display.setCursor(37, 35);
+    }
+    display.setTextSize(2);
+    display.print("mm");
+    display.setTextSize(3);
+  } else if (nombre == "Luz") {
+    conexLuz();
+    if (LUZ < 112) {
+      display.drawBitmap(10, 11, noche, 30, 20, WHITE);
+    } else if (LUZ >= 350) {
+      display.drawBitmap(15, 11, sol, 30, 20, WHITE);
+    } else {
+      display.drawBitmap(15, 11, nublado, 30, 20, WHITE);
+    }
+    display.setCursor(53, 35);
+    display.setTextSize(1);
+    display.print("ohm");
+    if(LUZ > 999){
+      display.setTextSize(2);
+    }else{
+      display.setTextSize(3);
+    }
+  } else if (nombre == "Altitud") {
+    conexBPM();
+    display.drawBitmap(10, 11, altitud, 30, 20, WHITE);
 
-  display.setTextSize(1);
-  display.setCursor(77, 12);
-  display.print("Humedad");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxhum, 1);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(minhum, 1);
-
-  display.display();
-}
-
-void humeSuelo() {
-  conexHumeSuelo();
-  display.setCursor(0, 11);
-  display.drawBitmap(10, 11, humSuelo, 30, 20, WHITE);
-
-  display.setTextSize(3);
-  display.setCursor(0, 35);
-  display.print(SUELO);
-  if (SUELO == 100) {
     display.setCursor(55, 35);
-  } else {
+    display.setTextSize(2);
+    display.print("m");
+
+    if (ALTITUD >= 999) {
+      display.setTextSize(1);
+    } else {
+      display.setTextSize(3);
+    }
+  } else if (nombre == "Presion") {
+    conexBPM();
+    display.drawBitmap(10, 11, presion, 30, 20, WHITE);
+
+    display.setCursor(55, 35);
+    display.setTextSize(1);
+    display.print("mb");
+
+    if (PRESION >= 999) {
+      display.setTextSize(1);
+    } else {
+      display.setTextSize(3);
+    }
+  } else if (nombre == "Temp Agua") {
+    conexTempAgua();
+    display.drawBitmap(15, 11, tempagua, 30, 20, WHITE);
     display.setCursor(37, 35);
+    display.setTextSize(2);
+    display.print((char)247);
+    display.print("C");
+
+    if (TEMP_AGUA >= 99) {
+      display.setTextSize(1);
+    } else {
+      display.setTextSize(3);
+    }
+  } else if (nombre == "Caudal") {
+    display.drawBitmap(15, 11, iconCaudal, 30, 20, WHITE);
+
+    display.setCursor(37, 35);
+    display.setTextSize(1);
+    display.print("L/min");
+
+    if (caudal_L_m >= 99) {
+      display.setTextSize(1);
+    } else {
+      display.setTextSize(3);
+    }
+
   }
-  display.setTextSize(2);
-  display.print("%");
+
+  display.setCursor(0, 35);
+  display.print(valorSensor, 0);
 
   display.setTextSize(1);
   display.setCursor(50, 12);
-  display.print("Humedad Suelo");
+  display.print(nombre);
 
   display.setTextSize(1);
   display.setCursor(75, 26);
   display.print("max:");
-  display.print(maxhs, 0);
+  display.print(max, 1);
   display.setCursor(75, 41);
   display.print("min:");
-  display.print(minhs, 0);
-
-  display.display();
-}
-
-void lluviaS() {
-  display.setCursor(0, 11);
-  if (LLUVIADIGI == 0) {
-    display.drawBitmap(15, 11, lluvia, 30, 20, WHITE);
-  } else {
-    display.drawBitmap(15, 11, nube, 30, 20, WHITE);
-  }
-
-  display.setTextSize(3);
-  display.setCursor(0, 35);
-  display.print(LLUVIANALOG, 0);
-  if (LLUVIANALOG == 100) {
-    display.setCursor(55, 35);
-  } else {
-    display.setCursor(37, 35);
-  }
-  display.setTextSize(2);
-  //para la unidad de lluviua
-  display.print("mm");
-
-  display.setTextSize(1);
-  display.setCursor(50, 12);
-  display.print("Precipitaci");
-  display.write(162);
-  display.print("n");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxllu, 1);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(minllu, 1);
-
-  display.display();
-}
-
-void luzS() {
-  conexLuz();
-  display.setCursor(0, 11);
-  if (LUZ < 112) {
-    display.drawBitmap(10, 11, noche, 30, 20, WHITE);
-  } else if (LUZ >= 350) {
-    display.drawBitmap(15, 11, sol, 30, 20, WHITE);
-  } else {
-    display.drawBitmap(15, 11, nublado, 30, 20, WHITE);
-  }
-
-  display.setTextSize(3);
-  display.setCursor(0, 35);
-  display.print(LUZ, 0);
-  display.setCursor(53, 35);
-  display.setTextSize(1);
-  display.print("ohm");
-
-  display.setTextSize(1);
-  display.setCursor(55, 12);
-  display.print("Luminosidad");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxluz, 1);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(minluz, 1);
-
-  display.display();
-}
-
-void altitudS() {
-  conexBPM();
-  display.setCursor(0, 11);
-  display.drawBitmap(10, 11, altitud, 30, 20, WHITE);
-
-  if (ALTITUD >= 999) {
-    display.setTextSize(1);
-  } else {
-    display.setTextSize(3);
-  }
-  display.setCursor(0, 35);
-  display.print(ALTITUD, 0);
-  display.setCursor(55, 35);
-  display.setTextSize(2);
-  display.print("m");
-
-  display.setTextSize(1);
-  display.setCursor(75, 12);
-  display.print("Altitud");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxalti, 0);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(minalti, 0);
-
-  display.display();
-}
-
-void presionS() {
-  conexBPM();
-  display.setCursor(0, 11);
-  display.drawBitmap(10, 11, presion, 30, 20, WHITE);
-
-  if (PRESION >= 999) {
-    display.setTextSize(1);
-  } else {
-    display.setTextSize(3);
-  }
-  display.setCursor(0, 35);
-  display.print(PRESION, 0);
-  display.setCursor(55, 35);
-  display.setTextSize(1);
-  display.print("mb");
-
-  display.setTextSize(1);
-  display.setCursor(75, 12);
-  display.print("Presi");
-  display.write(162);
-  display.print("n");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxpres, 0);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(minpres, 0);
-
-  display.display();
-}
-
-void tempAgua() {
-  conexTempAgua();
-  display.setCursor(0, 11);
-  display.drawBitmap(15, 11, tempagua, 30, 20, WHITE);
-
-  if (TEMP_AGUA >= 99) {
-    display.setTextSize(1);
-  } else {
-    display.setTextSize(3);
-  }
-  display.setCursor(0, 35);
-  display.print(TEMP_AGUA, 0);
-  display.setCursor(37, 35);
-  display.setTextSize(2);
-  display.print((char)247);
-  display.print("C");
-
-  display.setTextSize(1);
-  display.setCursor(65, 12);
-  display.print("Temp Agua");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxtemp_agua, 1);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(mintemp_agua, 1);
-
-  display.display();
-}
-
-void caudalS() {
-  display.setCursor(0, 11);
-  display.drawBitmap(15, 11, iconCaudal, 30, 20, WHITE);
-
-  if (caudal_L_m >= 99) {
-    display.setTextSize(1);
-  } else {
-    display.setTextSize(3);
-  }
-  display.setCursor(0, 35);
-  display.print(caudal_L_m, 0);
-  display.setCursor(37, 35);
-  display.setTextSize(1);
-  display.print("L/min");
-
-  display.setTextSize(1);
-  display.setCursor(75, 12);
-  display.print("Caudal");
-
-  display.setTextSize(1);
-  display.setCursor(75, 26);
-  display.print("max:");
-  display.print(maxcaudal, 1);
-  display.setCursor(75, 41);
-  display.print("min:");
-  display.print(mincaudal, 1);
+  display.print(min, 1);
 
   display.display();
 }
@@ -798,6 +596,11 @@ void headerArchivo() {
     sd_file.println("Caudal");
 
     sd_file.close();
+
+    cabeceraCreada = 1;
+    Serial.print("Cabecera creada");
+  } else {
+    cabeceraCreada = 0;
   }
 }
 
@@ -809,10 +612,39 @@ void header() {
   display.write(252);
   display.drawLine(0, 9, 128, 9, WHITE);
 
-  display.setCursor(84, 0);
-  display.print("Op: ");
-  display.setCursor(106, 0);
+  display.setCursor(16, 0);
+  if (sd_iniciada) {
+    display.print("Si");
+  } else {
+    display.print("No");
+  }
+
+  display.setCursor(32, 0);
+  display.print("M");
+  if (tipoModalidad == "GSM") {
+    display.print("3");
+  } else if (tipoModalidad == "Wi-Fi") {
+    display.print("2");
+  } else if (tipoModalidad == "Local") {
+    display.print("1");
+  } else {
+    display.print("0");
+  }
+
+  display.setCursor(48, 0);
+  display.write(124);
   display.print(valPot);
+  display.write(124);
+
+  display.setCursor(64, 0);
+  display.write(241);
+
+  display.setCursor(80, 0);
+  display.write(157);
+
+  display.setCursor(96, 0);
+  display.write(219);
+  display.write(219);
 }
 
 void iniciaVariables() {
@@ -832,7 +664,7 @@ void iniciaVariables() {
   float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
   caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
 
-  valPot = map(analogRead(36), 0, 4095, 0, 9);
+  valPot = map(analogRead(36), 0, 4095, 0, 10);
 }
 
 void minmaxVal() {
@@ -1023,10 +855,90 @@ void info() {
 }
 
 void almacenamientoLocal() {
-  header();
-  display.setCursor(0, 32);
+  /*display.setCursor(0, 32);
   display.print("Empez");
   display.write(162);
-  display.print(" almacenamiento " + tipoModalidad + "!");
+  display.print(" almacenamiento " + tipoModalidad + "!");*/
   refresh();
+
+  if (cabeceraCreada != 1) {
+    headerArchivo();
+  }
+
+  iniciaVariables();
+  header();
+
+  minmaxVal();
+  if (countTime % tiemporecoleccion == 0) {
+    //enviarSD();
+    countTime = 0;
+  }
+  countTime++;
+  Serial.println(countTime);
+
+  if (valPot == 0) {
+    mostrarTodo();
+  }
+  if (valPot == 1) {
+    mostrarDatos(HUMEDAD, "Humedad", maxhum, minhum);
+  }
+  if (valPot == 2) {
+    mostrarDatos(SUELO, "Humedad suelo", maxhs, minhs);
+  }
+  if (valPot == 3) {
+    mostrarDatos(LLUVIADIGI, "Pluviosidad", maxllu, minllu);
+  }
+  if (valPot == 4) {
+    mostrarDatos(LUZ, "Luz", maxluz, minluz);
+  }
+  if (valPot == 5) {
+    mostrarDatos(ALTITUD, "Altitud", maxalti, minalti);
+  }
+  if (valPot == 6) {
+    mostrarDatos(PRESION, "Presion", maxpres, minpres);
+  }
+  if (valPot == 7) {
+    mostrarDatos(TEMP_AGUA, "Temp Agua", maxtemp_agua, mintemp_agua);
+  }
+  if (valPot == 8) {
+    mostrarDatos(TEMPERATURA, "Temperatura", maxtemp, mintemp);
+  }
+  if (valPot == 9) {
+    mostrarDatos(caudal_L_m, "Caudal", maxcaudal, mincaudal);
+  }
+  if (valPot == 10) {
+    pic = 111;  //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir
+  }
+
+  Serial.print(" ");
+  Serial.print(contador);
+  Serial.print(" ::");
+  Serial.print("Temperatura: ");
+  Serial.print(TEMPERATURA);
+  Serial.print("\tHumedad: ");
+  Serial.print(HUMEDAD);
+  Serial.print("\tHumedad Suelo: ");
+  Serial.print(SUELO);
+  Serial.print("\tLluvia D: ");
+  Serial.print(LLUVIADIGI);
+  Serial.print("\tLluvia A: ");
+  Serial.print(LLUVIANALOG);
+  Serial.print("\tLuz: ");
+  Serial.print(LUZ);
+  Serial.print("\tAltitud: ");
+  Serial.print(ALTITUD);
+  Serial.print("\tPresion: ");
+  Serial.print(PRESION);
+  Serial.print("\tTEMP_BPM: ");
+  Serial.print(TEMP_BPM);
+  Serial.print("\tTemp Agua: ");
+  Serial.print(TEMP_AGUA);
+  Serial.print("FrecuenciaPulsos: ");
+  Serial.print(frecuencia, 0);
+  Serial.print(" Hz\tCaudal: ");
+  Serial.print(caudal_L_m, 3);
+  Serial.print(" L/min");
+  Serial.print("\tPotenciometro: ");
+  Serial.print(valPot);
+  Serial.println();
 }
