@@ -1,6 +1,4 @@
-//#include <ESP8266WiFi.h>
 #include <SPI.h>
-#include <WiFi.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -17,6 +15,12 @@
 #include <DallasTemperature.h>
 // librería para el menú
 #include <OneButton.h>
+//Librerías para el envío a Firebase
+#include <WiFi.h>
+#include <Firebase_ESP_Client.h>
+#include "time.h"
+#include "addons/TokenHelper.h"  //--> Generación de tokens
+#include "addons/RTDBHelper.h"   //--> Impresión de funciones auxiliares
 
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
@@ -24,9 +28,6 @@
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET LED_BUILTIN  // Reset pin #
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-const char* ssid = "TP-Link_293C";
-const char* password = "13904906";
 
 //Variables sensor de hume y temp
 int SENSORT_H = 4;
@@ -73,11 +74,11 @@ int SENSOR1_LUZ = 33, SENSOR2_LUZ = 25, minluz1_difusa = 5, minluz1_reflejada = 
 String registro;
 long segundos = 0.0, minutos = 0.0, horas = 0.0;
 bool sd_iniciada;
-String nombreArchivo = "/dataESP32_C.txt";
+String nombreArchivo = "/dataESP32_D.txt";
 int contador = 0, linea = 0;
 byte caracter;
 int cabeceraCreada = 0;
-int tiemporecoleccion = 191;  //~2min->37 |~5min->97 |~10min->191  | 15min ->    PUEDE SER REEMPLAZADO CON TIEMPOS CON LA HORA
+int tiemporecoleccion = 17;  //~1min -> 17//~2min->37 |~5min->97 |~10min->191  | 15min ->    PUEDE SER REEMPLAZADO CON TIEMPOS CON LA HORA
 //para el tiempo en ejecución -> para el guardado de datos
 int countTime = 0;
 //MENU
@@ -88,6 +89,40 @@ int button_brd = 14;
 long lastmillis = 0;
 long maxtime = 30000;
 String tipoModalidad = "";
+//Envío a Firebase
+#define WIFI_SSID "des"
+#define WIFI_PASSWORD "desdesdes"
+//#define WIFI_SSID "TP-Link_293C"
+//#define WIFI_PASSWORD "13904906"
+
+#define API_KEY "AIzaSyASpyvFug26lUAYfnODjtJLw0Jg8iLZ7og"
+#define USER_EMAIL "edbahamonde@espe.edu.ec"
+#define USER_PASSWORD "172596dD"
+#define DATABASE_URL "https://esp-firebase-demo-78fab-default-rtdb.firebaseio.com"
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+String uid;
+String databasePath;
+String timePath = "/timestamp";
+String tempPath = "/temperatura";
+String humPath = "/humedad";
+String suePath = "/suelo";
+String lluPath = "/lluvia";
+String luzPath = "/luz";
+String altiPath = "/altitud";
+String presPath = "/presion";
+String tempAPath = "/temp_agua";
+String frecPath = "/frecuencia";
+String caudalPath = "/caudal_L_m";
+String parentPath;
+int timestamp;
+FirebaseJson json;
+const char* ntpServer = "pool.ntp.org";
+unsigned long sendDataPrevMillis = 0;
+unsigned long timerDelay = 60000;  // = 1 min
+int comprueba = 0;
+unsigned long valordetiempo = -18000;
 
 OneButton button(button_brd, true);
 
@@ -224,6 +259,8 @@ void setup() {
   button.attachDoubleClick(doubleclick);
   button.attachLongPressStop(longPressStop);
   button.attachLongPressStart(longPressStart);
+
+  configTime(valordetiempo, 0, ntpServer);
 }
 
 void loop() {
@@ -258,27 +295,28 @@ void loop() {
     refresh();
   }
   //acepta capa 2
-  if (pic == 111 || pic == 112 || pic == 113) {
+  if (pic == 111 || pic == 112 || pic == 113) {  //ELIMINAR AL TENER TODOS LOS CASOS
     if (pic == 111) {
       pic = 116;  //Para salir
       while (pic != 111) {
+        if (comprueba == 0) {
+          initWiFi();  //Acomodar para q funcione con y sin internet
+        } else {
+        }
         almacenamientoLocal();
       }
-    }else
-    if (pic == 112) {
-      pic = 116; 
-      while(pic != 112){
-        refresh();
-        display.setCursor(0, 15);
-        display.setTextSize(1);
-        display.print("Iniciando almacenamiento Wifi");
-        delay(2000);
-        pic = 112;
+    } else if (pic == 112) {
+      pic = 117;
+      while (pic != 111) {
+        if (comprueba == 0) {
+          ejecucionSetWifi();
+        } else {
+        }
+        almacenamientoLocal();
       }
-    }else 
-    if (pic == 113) {
-      pic = 116; 
-      while(pic != 113){
+    } else if (pic == 113) {
+      pic = 116;
+      while (pic != 113) {
         refresh();
         display.setCursor(0, 15);
         display.setTextSize(1);
@@ -296,6 +334,28 @@ void loop() {
     info();
     refresh();
   }
+}
+
+void ejecucionSetWifi() {
+  initWiFi();
+  config.api_key = API_KEY;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  config.database_url = DATABASE_URL;
+  Firebase.reconnectWiFi(true);
+  fbdo.setResponseSize(4096);
+  config.token_status_callback = tokenStatusCallback;
+  config.max_token_generation_retry = 5;
+  Firebase.begin(&config, &auth);
+  Serial.println("Getting User UID");
+  while ((auth.token.uid) == "") {
+    Serial.print('.');
+    delay(1000);
+  }
+  uid = auth.token.uid.c_str();
+  Serial.print("User UID: ");
+  Serial.println(uid);
+  databasePath = "/UsersData/" + uid + "/readings";
 }
 
 void ContarPulsos() {
@@ -369,9 +429,9 @@ void mostrarDatos(int valorSensor, String nombre, int max, int min) {
     display.setCursor(53, 35);
     display.setTextSize(1);
     display.print("ohm");
-    if(LUZ > 999){
+    if (LUZ > 999) {
       display.setTextSize(2);
-    }else{
+    } else {
       display.setTextSize(3);
     }
   } else if (nombre == "Altitud") {
@@ -425,7 +485,6 @@ void mostrarDatos(int valorSensor, String nombre, int max, int min) {
     } else {
       display.setTextSize(3);
     }
-
   }
 
   display.setCursor(0, 35);
@@ -542,7 +601,6 @@ void enviarSD() {
   sd_file = SD.open(nombreArchivo, FILE_APPEND);
   if (sd_file) {
     enviarDatos();
-    contador++;
     display.setTextSize(1);
     display.write(24);
   } else {
@@ -556,24 +614,17 @@ void enviarSD() {
 
 void enviarDatos() {
   sd_file.print(
-    String(contador) + ", " + String(horas) + ":" + (minutos) + ":" + (segundos) + ", " + String(TEMPERATURA) + ", " + String(HUMEDAD) + ", " + String(SUELO) + ", " + String(LLUVIANALOG) + ", " + String(LUZ) + ", " + String(ALTITUD) + ", " + String(PRESION) + ", " + String(TEMP_AGUA) + ", " + String(frecuencia) + ", " + String(caudal_L_m) + "\n");
-
-  if (segundos >= 58) {
-    minutos++;
-  }
-  if (minutos > 59) {
-    horas++;
-    minutos = 0;
-  }
+    String(timestamp) + ", " + String(TEMPERATURA) + ", " + String(HUMEDAD) + ", " + String(SUELO) + ", " + String(LLUVIANALOG) + ", " + String(LUZ) + ", " + String(ALTITUD) + ", " + String(PRESION) + ", " + String(TEMP_AGUA) + ", " + String(frecuencia) + ", " + String(caudal_L_m) + 
+    "\n");
   sd_file.close();
+  Serial.println(contador);
+  contador++;
 }
 
 void headerArchivo() {
   sd_file = SD.open(nombreArchivo, FILE_WRITE);
   if (sd_file) {
-    sd_file.print("Id");
-    sd_file.print(",");
-    sd_file.print("Time");
+    sd_file.print("Tiempo");
     sd_file.print(",");
     sd_file.print("Temperatura");
     sd_file.print(",");
@@ -632,17 +683,17 @@ void header() {
   }
 
   display.setCursor(48, 0);
-  display.write(124);
+  display.write(178);
   display.print(valPot);
-  display.write(124);
+  display.write(178);
 
-  display.setCursor(64, 0);
+  display.setCursor(70, 0);
   display.write(241);
 
-  display.setCursor(80, 0);
+  display.setCursor(86, 0);
   display.write(157);
 
-  display.setCursor(96, 0);
+  display.setCursor(102, 0);
   display.write(219);
   display.write(219);
 }
@@ -861,20 +912,22 @@ void almacenamientoLocal() {
   display.print(" almacenamiento " + tipoModalidad + "!");*/
   refresh();
 
-  if (cabeceraCreada != 1) {
-    headerArchivo();
-  }
-
   iniciaVariables();
   header();
 
   minmaxVal();
-  if (countTime % tiemporecoleccion == 0) {
-    //enviarSD();
-    countTime = 0;
+
+  if (pic == 116) {
+    if (cabeceraCreada != 1) {
+      headerArchivo();
+    }
+    if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) {
+      sendDataPrevMillis = millis();
+      enviarSD();
+    }
+  } else if (pic == 117) {
+    enviarWifi();
   }
-  countTime++;
-  Serial.println(countTime);
 
   if (valPot == 0) {
     mostrarTodo();
@@ -909,11 +962,11 @@ void almacenamientoLocal() {
   if (valPot == 10) {
     pic = 111;  //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir
   }
-
+  timestamp = getTime();
   Serial.print(" ");
-  Serial.print(contador);
-  Serial.print(" ::");
-  Serial.print("Temperatura: ");
+  Serial.print("Tiempo: ");
+  Serial.print(timestamp);
+  Serial.print("\tTemperatura: ");
   Serial.print(TEMPERATURA);
   Serial.print("\tHumedad: ");
   Serial.print(HUMEDAD);
@@ -941,4 +994,53 @@ void almacenamientoLocal() {
   Serial.print("\tPotenciometro: ");
   Serial.print(valPot);
   Serial.println();
+}
+
+void initWiFi() {
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Conectando Wi-Fi..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
+  Serial.println();
+  comprueba = 1;
+}
+
+unsigned long getTime() {
+  time_t now;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    //Serial.println("Failed to obtain time");
+    return (0);
+  }
+  time(&now);
+  return now;
+}
+
+void enviarWifi() {
+
+  if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0)) {
+    sendDataPrevMillis = millis();
+
+    timestamp = getTime();
+    Serial.print("time: ");
+    Serial.println(timestamp);
+
+    parentPath = databasePath + "/" + String(timestamp);
+
+    json.set(timePath, String(timestamp));
+    json.set(tempPath.c_str(), String(TEMPERATURA));
+    json.set(humPath.c_str(), String(HUMEDAD));
+    json.set(suePath.c_str(), String(SUELO));
+    json.set(lluPath.c_str(), String(LLUVIANALOG));
+    json.set(luzPath.c_str(), String(LUZ));
+    json.set(altiPath.c_str(), String(ALTITUD));
+    json.set(presPath.c_str(), String(PRESION));
+    json.set(tempAPath.c_str(), String(TEMP_AGUA));
+    json.set(frecPath.c_str(), String(frecuencia));
+    json.set(caudalPath.c_str(), String(caudal_L_m));
+    Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentPath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());
+  }
 }
