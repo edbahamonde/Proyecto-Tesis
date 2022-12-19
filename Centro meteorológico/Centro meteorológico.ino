@@ -105,16 +105,16 @@ FirebaseConfig config;
 String uid;
 String databasePath;
 String timePath = "/timestamp";
-String tempPath = "/temperatura";
-String humPath = "/humedad";
-String suePath = "/suelo";
-String lluPath = "/lluvia";
-String luzPath = "/luz";
-String altiPath = "/altitud";
-String presPath = "/presion";
-String tempAPath = "/temp_agua";
-String frecPath = "/frecuencia";
-String caudalPath = "/caudal_L_m";
+String tempPath = "/Temperatura";
+String humPath = "/Humedad";
+String suePath = "/TempSuelo";
+String lluPath = "/Lluvia";
+String luzPath = "/Luz";
+String altiPath = "/Altitud";
+String presPath = "/Presion";
+String tempAPath = "/TempAgua";
+String frecPath = "/FrecuenciaPulsos";
+String caudalPath = "/Caudal";
 String parentPath;
 int timestamp;
 FirebaseJson json;
@@ -223,8 +223,23 @@ const unsigned char iconCaudal[] PROGMEM = {
   0x07, 0xf3, 0x00, 0x00, 0x0f, 0xf3, 0x00, 0x00, 0x0f, 0xff, 0x00, 0x00, 0x0f, 0xfe, 0x00, 0x00,
   0x0f, 0xf8, 0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x07, 0xf0, 0x00, 0x00, 0x03, 0xe0, 0x00, 0x00
 };
-
-
+//iconos header
+const unsigned char sdicon[] PROGMEM = {
+  0x3f, 0x80, 0x6a, 0x80, 0x7f, 0x80, 0xff, 0x80, 0x89, 0x80, 0xba, 0x80, 0xea, 0x80, 0x89, 0x80,
+  0xff, 0x80
+};
+const unsigned char wificon[] PROGMEM = {
+  0x00, 0x00, 0xff, 0x80, 0x00, 0x00, 0x7f, 0x00, 0x00, 0x00, 0x3e, 0x00, 0x00, 0x00, 0x1c, 0x00,
+  0x08, 0x00
+};
+const unsigned char gsmicon[] PROGMEM = {
+  0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x0d, 0x80, 0x0d, 0x80, 0x2d, 0x80, 0x6d, 0x80, 0xed, 0x80,
+  0xed, 0x80
+};
+const unsigned char bateriaicon[] PROGMEM = {
+  0xff, 0xf0, 0x80, 0x10, 0xb6, 0xd8, 0xb6, 0xd8, 0xb6, 0xd8, 0xb6, 0xd8, 0xb6, 0xd8, 0x80, 0x10,
+  0xff, 0xf0
+};
 
 void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -275,11 +290,20 @@ void loop() {
 
   //Capa 1
   if (pic == 0) {
-    header();
-    display.setCursor(0, 11);
-    display.setTextSize(1);
-    display.print("Por favor escoja la modalidad de trabajo del CM");
-    refresh();
+
+    //Para salir de la pantalla
+    while (valPot != 10) {
+      header();
+      display.setTextSize(1);
+      display.setCursor(0, 57);
+      display.print(F("CALIBRACI"));
+      display.write(149);
+      display.print(F("N"));
+      iniciaVariables();
+      mostrarTodo();
+      refresh();
+    }
+    pic = 1;
   }
   menuInicial();
   //Capa 2
@@ -300,9 +324,10 @@ void loop() {
       pic = 116;  //Para salir
       while (pic != 111) {
         if (comprueba == 0) {
-          initWiFi();  //Acomodar para q funcione con y sin internet
+          initWiFi();
         } else {
         }
+        iniciaVariables();
         almacenamientoLocal();
       }
     } else if (pic == 112) {
@@ -312,6 +337,7 @@ void loop() {
           ejecucionSetWifi();
         } else {
         }
+        iniciaVariables();
         almacenamientoLocal();
       }
     } else if (pic == 113) {
@@ -508,45 +534,49 @@ void mostrarDatos(int valorSensor, String nombre, int max, int min) {
 void mostrarTodo() {
   display.setTextSize(1);
 
-  display.setCursor(0, 12);
+  display.setCursor(0, 14);
   display.print("T:");
   display.print(TEMPERATURA, 0);
 
-  display.setCursor(0, 22);
+  display.setCursor(0, 24);
   display.print("H:");
   display.print(HUMEDAD, 0);
 
-  display.setCursor(0, 32);
+  display.setCursor(0, 34);
   display.print("HS:");
   display.print(SUELO, 0);
 
-  display.setCursor(0, 42);
+  display.setCursor(0, 44);
   display.print("LL:");
   display.print(LLUVIANALOG, 0);
 
-  display.setCursor(0, 52);
+  display.setCursor(35, 14);
   display.print("LU:");
   display.print(LUZ, 0);
 
-  display.setCursor(60, 12);
+  display.setCursor(35, 24);
   display.print("AL:");
   display.print(ALTITUD, 0);
 
-  display.setCursor(60, 22);
+  display.setCursor(35, 34);
   display.print("P:");
   display.print(PRESION, 0);
 
-  display.setCursor(60, 32);
+  display.setCursor(35, 44);
   display.print("TA:");
-  display.print(TEMP_BPM, 0);
+  display.print(TEMP_AGUA, 0);
 
-  display.setCursor(60, 42);
+  display.setCursor(84, 14);
   display.print("Fr:");
   display.print(frecuencia, 0);
 
-  display.setCursor(60, 52);
+  display.setCursor(84, 24);
   display.print("Ca:");
   display.print(caudal_L_m, 0);
+
+  display.setCursor(84, 34);
+  display.print("T-B:");
+  display.print(TEMP_BPM, 0);
 
   display.display();
 }
@@ -614,8 +644,7 @@ void enviarSD() {
 
 void enviarDatos() {
   sd_file.print(
-    String(timestamp) + ", " + String(TEMPERATURA) + ", " + String(HUMEDAD) + ", " + String(SUELO) + ", " + String(LLUVIANALOG) + ", " + String(LUZ) + ", " + String(ALTITUD) + ", " + String(PRESION) + ", " + String(TEMP_AGUA) + ", " + String(frecuencia) + ", " + String(caudal_L_m) + 
-    "\n");
+    String(timestamp) + "," + String(TEMPERATURA) + "," + String(HUMEDAD) + "," + String(SUELO) + "," + String(LLUVIANALOG) + "," + String(LUZ) + "," + String(ALTITUD) + "," + String(PRESION) + "," + String(TEMP_AGUA) + "," + String(frecuencia) + "," + String(caudal_L_m) + "\n");
   sd_file.close();
   Serial.println(contador);
   contador++;
@@ -663,11 +692,12 @@ void header() {
   display.write(252);
   display.drawLine(0, 9, 128, 9, WHITE);
 
-  display.setCursor(16, 0);
   if (sd_iniciada) {
-    display.print("Si");
+    display.drawBitmap(20, 0, sdicon, 9, 9, WHITE);
   } else {
-    display.print("No");
+    display.setCursor(13, 0);
+    display.print("x");
+    display.drawBitmap(20, 0, sdicon, 9, 9, WHITE);
   }
 
   display.setCursor(32, 0);
@@ -682,20 +712,18 @@ void header() {
     display.print("0");
   }
 
-  display.setCursor(48, 0);
+  display.setCursor(45, 0);
   display.write(178);
   display.print(valPot);
   display.write(178);
 
-  display.setCursor(70, 0);
-  display.write(241);
+  display.drawBitmap(68, 0, gsmicon, 9, 9, WHITE);
 
-  display.setCursor(86, 0);
-  display.write(157);
+  display.drawBitmap(82, 0, wificon, 9, 9, WHITE);
 
-  display.setCursor(102, 0);
-  display.write(219);
-  display.write(219);
+  display.drawBitmap(95, 0, bateriaicon, 13, 9, WHITE);
+  display.setCursor(110, 0);
+  display.print("100");
 }
 
 void iniciaVariables() {
@@ -704,10 +732,11 @@ void iniciaVariables() {
   SUELO = map(analogRead(SENSOR_HS), 0, 4095, 100, 0);
   LLUVIANALOG = map(analogRead(lluviaAnalog), 0, 4095, 100, 0);
   LLUVIADIGI = digitalRead(lluviaDigital);
+  //LUZ = map(analogRead(SENSORLUZ), 100, 4000, 0, 100);
   LUZ = analogRead(SENSORLUZ);
   ALTITUD = bmp280.readAltitude(1011.18);
   PRESION = (bmp280.readPressure() / 100);
-  //TEMP_BPM = bmp280.readTemperature(); Ya existe temperatura
+  TEMP_BPM = bmp280.readTemperature();
 
   DS18B20.requestTemperatures();
   TEMP_AGUA = DS18B20.getTempCByIndex(0);
@@ -906,22 +935,18 @@ void info() {
 }
 
 void almacenamientoLocal() {
-  /*display.setCursor(0, 32);
-  display.print("Empez");
-  display.write(162);
-  display.print(" almacenamiento " + tipoModalidad + "!");*/
+
   refresh();
 
-  iniciaVariables();
-  header();
-
   minmaxVal();
+
+  header();
 
   if (pic == 116) {
     if (cabeceraCreada != 1) {
       headerArchivo();
     }
-    if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) {
+    if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0 && timestamp != 0) {
       sendDataPrevMillis = millis();
       enviarSD();
     }
@@ -942,7 +967,7 @@ void almacenamientoLocal() {
     mostrarDatos(LLUVIADIGI, "Pluviosidad", maxllu, minllu);
   }
   if (valPot == 4) {
-    mostrarDatos(LUZ, "Luz", maxluz, minluz);
+    mostrarDatos(LUZ, "Luz", 300, 100);
   }
   if (valPot == 5) {
     mostrarDatos(ALTITUD, "Altitud", maxalti, minalti);
@@ -987,7 +1012,7 @@ void almacenamientoLocal() {
   Serial.print("\tTemp Agua: ");
   Serial.print(TEMP_AGUA);
   Serial.print("FrecuenciaPulsos: ");
-  Serial.print(frecuencia, 0);
+  Serial.print(frecuencia);
   Serial.print(" Hz\tCaudal: ");
   Serial.print(caudal_L_m, 3);
   Serial.print(" L/min");
@@ -997,6 +1022,9 @@ void almacenamientoLocal() {
 }
 
 void initWiFi() {
+  refresh();
+  display.setCursor(0, 15);
+  display.print("Conectando Wi-Fi..");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Conectando Wi-Fi..");
   while (WiFi.status() != WL_CONNECTED) {
@@ -1005,6 +1033,8 @@ void initWiFi() {
   }
   Serial.println(WiFi.localIP());
   Serial.println();
+  display.setCursor(0, 24);
+  display.print(WiFi.localIP());
   comprueba = 1;
 }
 
@@ -1020,17 +1050,16 @@ unsigned long getTime() {
 }
 
 void enviarWifi() {
+  timestamp = getTime();
 
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0)) {
+  if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) && timestamp != 0) {
     sendDataPrevMillis = millis();
 
-    timestamp = getTime();
     Serial.print("time: ");
     Serial.println(timestamp);
 
     parentPath = databasePath + "/" + String(timestamp);
 
-    json.set(timePath, String(timestamp));
     json.set(tempPath.c_str(), String(TEMPERATURA));
     json.set(humPath.c_str(), String(HUMEDAD));
     json.set(suePath.c_str(), String(SUELO));
