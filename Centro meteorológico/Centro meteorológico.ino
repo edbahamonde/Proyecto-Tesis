@@ -1089,9 +1089,8 @@ void initWiFi() {
   display.setCursor(0, 15);
   Serial.print("Conectando Wi-Fi..");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    refresh();
-    display.print("Conectando a Wi-Fi..");
+  display.print("Conectando a Wi-Fi..");
+  while (/*WiFi.status() != WL_CONNECTED ||*/ countWi != 40) {
     Serial.print('.');
     delay(1000);
     countWi++;
