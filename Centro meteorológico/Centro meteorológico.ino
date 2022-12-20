@@ -43,10 +43,11 @@ int SUELO;
 float maxhs = 0;
 float minhs = 100;
 //Sensor de lluvia
-int lluviaAnalog = 35, lluviaDigital = 34, LLUVIANALOG, LLUVIADIGI, maxllu, minllu = 100;
+int lluviaAnalog = 34, LLUVIANALOG, maxllu, minllu = 100;
 //Sensor de luminosidad
-int SENSORLUZ = 13, LUZ;
-int maxluz = 0, minluz = 500;
+int SENSOR_LUZ = 35, LUZ, maxluz = 0, minluz = 500;
+//Sensor de viento
+int SENSOR_ANE = 25, ANEMOMETRO, maxane = 0, minane = 500;
 //Sensor de presión
 float ALTITUD;
 int maxalti = 0, minalti = 500;
@@ -68,13 +69,14 @@ int NumPulsos, CAUDAL = 32;
 float factor_conversion = 7.5, caudal_L_m;
 int frecuencia, mincaudal = 500, maxcaudal = 0, medidaIntervalo = 2500;
 //sensores de luminosidad
-int SENSOR1_LUZ = 33, SENSOR2_LUZ = 25, minluz1_difusa = 5, minluz1_reflejada = 5, maxluz1_difusa = 0, maxluz1_reflejada = 0;
+int SENSOR1_LUZ = 33, SENSOR2_LUZ = 25, minluz1_reflejada = 5, maxluz1_reflejada = 0;
+int LUZ_DIRECTA, mindirecta = 30, maxdirecta = 0;
 //Sdk
 #define CS_PIN 5
 String registro;
 long segundos = 0.0, minutos = 0.0, horas = 0.0;
 bool sd_iniciada;
-String nombreArchivo = "/dataESP32_D.txt";
+String nombreArchivo = "/dataESP32_E.txt";
 int contador = 0, linea = 0;
 byte caracter;
 int cabeceraCreada = 0;
@@ -113,16 +115,17 @@ String luzPath = "/Luz";
 String altiPath = "/Altitud";
 String presPath = "/Presion";
 String tempAPath = "/TempAgua";
-String frecPath = "/FrecuenciaPulsos";
+String luz_direcPath = "/LuzDirecta";
 String caudalPath = "/Caudal";
+String anePath = "/Anemometro";
 String parentPath;
 int timestamp;
 FirebaseJson json;
-const char* ntpServer = "pool.ntp.org";
 unsigned long sendDataPrevMillis = 0;
-unsigned long timerDelay = 60000;  // = 1 min
+unsigned long timerDelay = 30000;  // cada 30seg  // 60000 = 1 min
 int comprueba = 0;
-unsigned long valordetiempo = -18000;
+int timezone = -18000;
+int countWi = 0;
 
 OneButton button(button_brd, true);
 
@@ -223,6 +226,14 @@ const unsigned char iconCaudal[] PROGMEM = {
   0x07, 0xf3, 0x00, 0x00, 0x0f, 0xf3, 0x00, 0x00, 0x0f, 0xff, 0x00, 0x00, 0x0f, 0xfe, 0x00, 0x00,
   0x0f, 0xf8, 0x00, 0x00, 0x0f, 0xf0, 0x00, 0x00, 0x07, 0xf0, 0x00, 0x00, 0x03, 0xe0, 0x00, 0x00
 };
+//icono del anemómetro
+const unsigned char ventilador[] PROGMEM = {
+  0x00, 0x07, 0xe0, 0x00, 0x00, 0x0f, 0xf8, 0x00, 0x00, 0x1f, 0xf8, 0x00, 0x00, 0x1f, 0xf8, 0x00,
+  0x00, 0x1f, 0xf0, 0x00, 0x00, 0x1f, 0xc0, 0x00, 0x3c, 0x1f, 0x80, 0x00, 0x7e, 0x0f, 0x87, 0xe0,
+  0xff, 0x9f, 0xff, 0xf8, 0xff, 0xfc, 0xff, 0xfc, 0xff, 0xfc, 0xff, 0xfc, 0x7f, 0xff, 0xe7, 0xfc,
+  0x1f, 0xc7, 0xc1, 0xf8, 0x00, 0x07, 0xe0, 0xf8, 0x00, 0x0f, 0xe0, 0x00, 0x00, 0x3f, 0xe0, 0x00,
+  0x00, 0x7f, 0xe0, 0x00, 0x00, 0x7f, 0xe0, 0x00, 0x00, 0x7f, 0xc0, 0x00, 0x00, 0x1f, 0x80, 0x00
+};
 //iconos header
 const unsigned char sdicon[] PROGMEM = {
   0x3f, 0x80, 0x6a, 0x80, 0x7f, 0x80, 0xff, 0x80, 0x89, 0x80, 0xba, 0x80, 0xea, 0x80, 0x89, 0x80,
@@ -264,8 +275,8 @@ void setup() {
   }*/
 
   dht.begin();
-  pinMode(lluviaDigital, INPUT);
   pinMode(CAUDAL, INPUT);
+  pinMode(SENSOR_ANE, INPUT);
   attachInterrupt(digitalPinToInterrupt(CAUDAL), ContarPulsos, RISING);
 
   DS18B20.begin();
@@ -275,7 +286,7 @@ void setup() {
   button.attachLongPressStop(longPressStop);
   button.attachLongPressStart(longPressStart);
 
-  configTime(valordetiempo, 0, ntpServer);
+  configTime(timezone, 0, "south-america.pool.ntp.org");
 }
 
 void loop() {
@@ -290,15 +301,12 @@ void loop() {
 
   //Capa 1
   if (pic == 0) {
-
     //Para salir de la pantalla
-    while (valPot != 10) {
+    while (valPot != 9) {
       header();
       display.setTextSize(1);
       display.setCursor(0, 57);
-      display.print(F("CALIBRACI"));
-      display.write(149);
-      display.print(F("N"));
+      display.print(F("Calibrar"));
       iniciaVariables();
       mostrarTodo();
       refresh();
@@ -319,37 +327,32 @@ void loop() {
     refresh();
   }
   //acepta capa 2
-  if (pic == 111 || pic == 112 || pic == 113) {  //ELIMINAR AL TENER TODOS LOS CASOS
-    if (pic == 111) {
-      pic = 116;  //Para salir
-      while (pic != 111) {
-        if (comprueba == 0) {
-          initWiFi();
-        } else {
-        }
-        iniciaVariables();
-        almacenamientoLocal();
+  if (pic == 111) {
+    pic = 116;  //Para salir
+    while (pic != 111) {
+      if (comprueba != 1) {
+        initWiFi();
       }
-    } else if (pic == 112) {
-      pic = 117;
-      while (pic != 111) {
-        if (comprueba == 0) {
-          ejecucionSetWifi();
-        } else {
-        }
-        iniciaVariables();
-        almacenamientoLocal();
+      almacenamiento();
+    }
+  } else if (pic == 112) {
+    pic = 117;
+    while (pic != 111) {
+      if (comprueba == 0) {
+        ejecucionSetWifi();
+      } else {
       }
-    } else if (pic == 113) {
-      pic = 116;
-      while (pic != 113) {
-        refresh();
-        display.setCursor(0, 15);
-        display.setTextSize(1);
-        display.print("Iniciando almacenamiento GSM");
-        delay(2000);
-        pic = 113;
-      }
+      almacenamiento();
+    }
+  } else if (pic == 113) {
+    pic = 116;
+    while (pic != 113) {
+      refresh();
+      display.setCursor(0, 15);
+      display.setTextSize(1);
+      display.print("Iniciando almacenamiento GSM");
+      delay(2000);
+      pic = 113;
     }
   }
   if (pic == 121 || pic == 122 || pic == 123) {
@@ -511,6 +514,20 @@ void mostrarDatos(int valorSensor, String nombre, int max, int min) {
     } else {
       display.setTextSize(3);
     }
+  } else if (nombre == "Anemometro") {
+    display.drawBitmap(15, 11, ventilador, 30, 20, WHITE);
+
+    display.setCursor(37, 35);
+    display.setTextSize(1);
+    display.print("m");
+    display.setTextSize(3);
+  } else if (nombre == "Luz Directa") {
+    display.drawBitmap(15, 11, sol, 30, 20, WHITE);
+
+    display.setCursor(37, 35);
+    display.setTextSize(1);
+    display.print("V");
+    display.setTextSize(3);
   }
 
   display.setCursor(0, 35);
@@ -531,8 +548,29 @@ void mostrarDatos(int valorSensor, String nombre, int max, int min) {
   display.display();
 }
 
+void fechaActual() {
+  time_t now = time(nullptr);
+  struct tm* p_tm = localtime(&now);
+
+  /*display.setCursor(0, 57);
+  display.print(p_tm->tm_hour);
+  display.print(":");
+  if (p_tm->tm_min < 10)
+    display.print("0");
+  display.print(p_tm->tm_min);
+
+  display.setCursor(64, 57);
+  display.print(p_tm->tm_mday);
+  display.print("/");
+  display.print(p_tm->tm_mon + 1);
+  display.print("/");
+  display.print(p_tm->tm_year + 1900);*/
+}
+
 void mostrarTodo() {
   display.setTextSize(1);
+
+  //fechaActual();
 
   display.setCursor(0, 14);
   display.print("T:");
@@ -567,16 +605,20 @@ void mostrarTodo() {
   display.print(TEMP_AGUA, 0);
 
   display.setCursor(84, 14);
-  display.print("Fr:");
-  display.print(frecuencia, 0);
-
-  display.setCursor(84, 24);
   display.print("Ca:");
   display.print(caudal_L_m, 0);
 
-  display.setCursor(84, 34);
+  display.setCursor(84, 24);
   display.print("T-B:");
   display.print(TEMP_BPM, 0);
+
+  display.setCursor(84, 34);
+  display.print("PA:");
+  display.print(LUZ_DIRECTA, 0);
+
+  display.setCursor(84, 44);
+  display.print("AN:");
+  display.print(ANEMOMETRO, 0);
 
   display.display();
 }
@@ -644,7 +686,7 @@ void enviarSD() {
 
 void enviarDatos() {
   sd_file.print(
-    String(timestamp) + "," + String(TEMPERATURA) + "," + String(HUMEDAD) + "," + String(SUELO) + "," + String(LLUVIANALOG) + "," + String(LUZ) + "," + String(ALTITUD) + "," + String(PRESION) + "," + String(TEMP_AGUA) + "," + String(frecuencia) + "," + String(caudal_L_m) + "\n");
+    String(timestamp) + "," + String(TEMPERATURA) + "," + String(HUMEDAD) + "," + String(SUELO) + "," + String(LLUVIANALOG) + "," + String(LUZ) + "," + String(ALTITUD) + "," + String(PRESION) + "," + String(TEMP_AGUA) + "," + String(LUZ_DIRECTA) + "," + String(caudal_L_m) + "," + String(ANEMOMETRO) + "\n");
   sd_file.close();
   Serial.println(contador);
   contador++;
@@ -671,9 +713,11 @@ void headerArchivo() {
     sd_file.print(",");
     sd_file.print("TempAgua");
     sd_file.print(",");
-    sd_file.print("FrecuenciaPulsos");
+    sd_file.print("LuzDirecta");
     sd_file.print(",");
     sd_file.println("Caudal");
+    sd_file.print(",");
+    sd_file.println("Anemometro");
 
     sd_file.close();
 
@@ -727,24 +771,23 @@ void header() {
 }
 
 void iniciaVariables() {
+  LUZ_DIRECTA = map(analogRead(SENSOR1_LUZ), 0, 4095, 0, 30);
   TEMPERATURA = dht.readTemperature();
   HUMEDAD = dht.readHumidity();
   SUELO = map(analogRead(SENSOR_HS), 0, 4095, 100, 0);
   LLUVIANALOG = map(analogRead(lluviaAnalog), 0, 4095, 100, 0);
-  LLUVIADIGI = digitalRead(lluviaDigital);
-  //LUZ = map(analogRead(SENSORLUZ), 100, 4000, 0, 100);
-  LUZ = analogRead(SENSORLUZ);
+  LUZ = analogRead(SENSOR_LUZ);
   ALTITUD = bmp280.readAltitude(1011.18);
   PRESION = (bmp280.readPressure() / 100);
   TEMP_BPM = bmp280.readTemperature();
-
   DS18B20.requestTemperatures();
   TEMP_AGUA = DS18B20.getTempCByIndex(0);
+  ANEMOMETRO = 0;  // ***********!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!REEMPLAZAR POR VALOR***********!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   //tempF = tempC * 9 / 5 + 32;
   float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
   caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
 
-  valPot = map(analogRead(36), 0, 4095, 0, 10);
+  valPot = map(analogRead(36), 0, 4095, 0, 12);
 }
 
 void minmaxVal() {
@@ -801,6 +844,18 @@ void minmaxVal() {
   }
   if (caudal_L_m < mincaudal) {
     mincaudal = caudal_L_m;
+  }
+  if (ANEMOMETRO > maxane) {
+    maxane = ANEMOMETRO;
+  }
+  if (ANEMOMETRO < minane) {
+    minane = ANEMOMETRO;
+  }
+  if (LUZ_DIRECTA > maxdirecta) {
+    maxdirecta = LUZ_DIRECTA;
+  }
+  if (LUZ_DIRECTA < mindirecta) {
+    mindirecta = LUZ_DIRECTA;
   }
 }
 
@@ -934,19 +989,21 @@ void info() {
   display.print("-> Ernesto Bahamonde");
 }
 
-void almacenamientoLocal() {
+void almacenamiento() {
 
   refresh();
+  iniciaVariables();
 
   minmaxVal();
 
   header();
 
   if (pic == 116) {
-    if (cabeceraCreada != 1) {
+    while (cabeceraCreada != 1) {
       headerArchivo();
     }
-    if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0 && timestamp != 0) {
+    if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) {
+      timestamp = getTime();
       sendDataPrevMillis = millis();
       enviarSD();
     }
@@ -958,36 +1015,42 @@ void almacenamientoLocal() {
     mostrarTodo();
   }
   if (valPot == 1) {
-    mostrarDatos(HUMEDAD, "Humedad", maxhum, minhum);
-  }
-  if (valPot == 2) {
-    mostrarDatos(SUELO, "Humedad suelo", maxhs, minhs);
-  }
-  if (valPot == 3) {
-    mostrarDatos(LLUVIADIGI, "Pluviosidad", maxllu, minllu);
-  }
-  if (valPot == 4) {
-    mostrarDatos(LUZ, "Luz", 300, 100);
-  }
-  if (valPot == 5) {
-    mostrarDatos(ALTITUD, "Altitud", maxalti, minalti);
-  }
-  if (valPot == 6) {
-    mostrarDatos(PRESION, "Presion", maxpres, minpres);
-  }
-  if (valPot == 7) {
-    mostrarDatos(TEMP_AGUA, "Temp Agua", maxtemp_agua, mintemp_agua);
-  }
-  if (valPot == 8) {
     mostrarDatos(TEMPERATURA, "Temperatura", maxtemp, mintemp);
   }
+  if (valPot == 2) {
+    mostrarDatos(HUMEDAD, "Humedad", maxhum, minhum);
+  }
+  if (valPot == 3) {
+    mostrarDatos(SUELO, "Humedad suelo", maxhs, minhs);
+  }
+  if (valPot == 4) {
+    mostrarDatos(LLUVIANALOG, "Pluviosidad", maxllu, minllu);
+  }
+  if (valPot == 5) {
+    mostrarDatos(LUZ, "Luz", maxluz, minluz);
+  }
+  if (valPot == 6) {
+    mostrarDatos(ALTITUD, "Altitud", maxalti, minalti);
+  }
+  if (valPot == 7) {
+    mostrarDatos(PRESION, "Presion", maxpres, minpres);
+  }
+  if (valPot == 8) {
+    mostrarDatos(TEMP_AGUA, "Temp Agua", maxtemp_agua, mintemp_agua);
+  }
   if (valPot == 9) {
-    mostrarDatos(caudal_L_m, "Caudal", maxcaudal, mincaudal);
+    mostrarDatos(LUZ_DIRECTA, "Luz Directa", maxdirecta, mindirecta);
   }
   if (valPot == 10) {
+    mostrarDatos(caudal_L_m, "Caudal", maxcaudal, mincaudal);
+  }
+  if (valPot == 11) {
+    mostrarDatos(ANEMOMETRO, "Anemometro", maxane, minane);
+  }
+  if (valPot == 12) {
     pic = 111;  //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir
   }
-  timestamp = getTime();
+
   Serial.print(" ");
   Serial.print("Tiempo: ");
   Serial.print(timestamp);
@@ -997,8 +1060,6 @@ void almacenamientoLocal() {
   Serial.print(HUMEDAD);
   Serial.print("\tHumedad Suelo: ");
   Serial.print(SUELO);
-  Serial.print("\tLluvia D: ");
-  Serial.print(LLUVIADIGI);
   Serial.print("\tLluvia A: ");
   Serial.print(LLUVIANALOG);
   Serial.print("\tLuz: ");
@@ -1007,15 +1068,17 @@ void almacenamientoLocal() {
   Serial.print(ALTITUD);
   Serial.print("\tPresion: ");
   Serial.print(PRESION);
-  Serial.print("\tTEMP_BPM: ");
-  Serial.print(TEMP_BPM);
   Serial.print("\tTemp Agua: ");
   Serial.print(TEMP_AGUA);
-  Serial.print("FrecuenciaPulsos: ");
-  Serial.print(frecuencia);
-  Serial.print(" Hz\tCaudal: ");
+  Serial.print("LuzDirecta: ");
+  Serial.print(LUZ_DIRECTA);
+  Serial.print("\tCaudal: ");
   Serial.print(caudal_L_m, 3);
   Serial.print(" L/min");
+  Serial.print("\tAnemometro: ");
+  Serial.print(ANEMOMETRO);
+  Serial.print("\tTEMP_BPM: ");
+  Serial.print(TEMP_BPM);
   Serial.print("\tPotenciometro: ");
   Serial.print(valPot);
   Serial.println();
@@ -1024,12 +1087,15 @@ void almacenamientoLocal() {
 void initWiFi() {
   refresh();
   display.setCursor(0, 15);
-  display.print("Conectando Wi-Fi..");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Conectando Wi-Fi..");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
+    refresh();
+    display.print("Conectando a Wi-Fi..");
     Serial.print('.');
     delay(1000);
+    countWi++;
+    Serial.print(countWi);
   }
   Serial.println(WiFi.localIP());
   Serial.println();
@@ -1068,8 +1134,9 @@ void enviarWifi() {
     json.set(altiPath.c_str(), String(ALTITUD));
     json.set(presPath.c_str(), String(PRESION));
     json.set(tempAPath.c_str(), String(TEMP_AGUA));
-    json.set(frecPath.c_str(), String(frecuencia));
+    json.set(luz_direcPath.c_str(), String(LUZ_DIRECTA));
     json.set(caudalPath.c_str(), String(caudal_L_m));
+    json.set(anePath.c_str(), String(ANEMOMETRO));
     Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentPath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());
   }
 }
