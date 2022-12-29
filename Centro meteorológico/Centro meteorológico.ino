@@ -92,8 +92,10 @@ long lastmillis = 0;
 long maxtime = 30000;
 String tipoModalidad = "";
 //Envío a Firebase
-#define WIFI_SSID "des"
-#define WIFI_PASSWORD "desdesdes"
+//#define WIFI_SSID "des"
+//#define WIFI_PASSWORD "desdesdes"
+#define WIFI_SSID "GALBATOR"
+#define WIFI_PASSWORD "1753632718-001@."
 //#define WIFI_SSID "TP-Link_293C"
 //#define WIFI_PASSWORD "13904906"
 
@@ -302,6 +304,7 @@ void loop() {
   //Capa 1
   if (pic == 0) {
     //Para salir de la pantalla
+    refresh();
     while (valPot != 9) {
       header();
       display.setTextSize(1);
@@ -787,7 +790,7 @@ void iniciaVariables() {
   float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
   caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
 
-  valPot = map(analogRead(36), 0, 4095, 0, 12);
+  valPot = map(analogRead(36), 0, 4095, 0, 13);
 }
 
 void minmaxVal() {
@@ -1004,6 +1007,7 @@ void almacenamiento() {
     }
     if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) {
       timestamp = getTime();
+      timestamp = timestamp - timezone;
       sendDataPrevMillis = millis();
       enviarSD();
     }
@@ -1050,6 +1054,9 @@ void almacenamiento() {
   if (valPot == 12) {
     pic = 111;  //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir
   }
+  if (valPot == 13) {
+    pic = 111;  //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir
+  }
 
   Serial.print(" ");
   Serial.print("Tiempo: ");
@@ -1089,12 +1096,15 @@ void initWiFi() {
   display.setCursor(0, 15);
   Serial.print("Conectando Wi-Fi..");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  display.print("Conectando a Wi-Fi..");
+  display.println("\nConectando a Wi-Fi");
+  display.display();
   while (/*WiFi.status() != WL_CONNECTED ||*/ countWi != 40) {
     Serial.print('.');
-    delay(1000);
     countWi++;
     Serial.print(countWi);
+    delay(500);
+    display.print(".");
+    display.display();
   }
   Serial.println(WiFi.localIP());
   Serial.println();
@@ -1116,6 +1126,7 @@ unsigned long getTime() {
 
 void enviarWifi() {
   timestamp = getTime();
+  timestamp = timestamp - timezone;
 
   if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) && timestamp != 0) {
     sendDataPrevMillis = millis();
