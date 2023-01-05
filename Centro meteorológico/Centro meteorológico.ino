@@ -21,6 +21,8 @@
 #include "time.h"
 #include "addons/TokenHelper.h"  //--> Generación de tokens
 #include "addons/RTDBHelper.h"   //--> Impresión de funciones auxiliares
+//Librería para el envío a Google Sheets
+#include <HTTPClient.h>
 
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
@@ -74,13 +76,11 @@ int LUZ_DIRECTA, mindirecta = 30, maxdirecta = 0;
 //Sdk
 #define CS_PIN 5
 String registro;
-long segundos = 0.0, minutos = 0.0, horas = 0.0;
 bool sd_iniciada;
 String nombreArchivo = "/dataESP32_E.txt";
 int contador = 0, linea = 0;
 byte caracter;
 int cabeceraCreada = 0;
-int tiemporecoleccion = 17;  //~1min -> 17//~2min->37 |~5min->97 |~10min->191  | 15min ->    PUEDE SER REEMPLAZADO CON TIEMPOS CON LA HORA
 //para el tiempo en ejecución -> para el guardado de datos
 int countTime = 0;
 //MENU
@@ -92,17 +92,19 @@ long lastmillis = 0;
 long maxtime = 30000;
 String tipoModalidad = "";
 //Envío a Firebase
-//#define WIFI_SSID "des"
-//#define WIFI_PASSWORD "desdesdes"
-#define WIFI_SSID "GALBATOR"
-#define WIFI_PASSWORD "1753632718-001@."
+#define WIFI_SSID "des"
+#define WIFI_PASSWORD "desdesdes"
+//#define WIFI_SSID "GALBATOR"
+//#define WIFI_PASSWORD "1753632718-001@."
 //#define WIFI_SSID "TP-Link_293C"
 //#define WIFI_PASSWORD "13904906"
 
 #define API_KEY "AIzaSyASpyvFug26lUAYfnODjtJLw0Jg8iLZ7og"
+//#define API_KEY "AIzaSyB9bpLXN8fZQC3F4st2ClGuMXtUkL5kDkY"
 #define USER_EMAIL "edbahamonde@espe.edu.ec"
 #define USER_PASSWORD "172596dD"
 #define DATABASE_URL "https://esp-firebase-demo-78fab-default-rtdb.firebaseio.com"
+//#define DATABASE_URL "https://esp-cm-default-rtdb.firebaseio.com"
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
@@ -124,10 +126,12 @@ String parentPath;
 int timestamp;
 FirebaseJson json;
 unsigned long sendDataPrevMillis = 0;
-unsigned long timerDelay = 30000;  // cada 30seg  // 60000 = 1 min
+unsigned long timerDelay = 30000;  // 30000 = 30seg  // 60000 = 1 min
 int comprueba = 0;
 int timezone = -18000;
 int countWi = 0;
+//Google Sheets
+String GOOGLE_SCRIPT_ID = "AKfycbyDCr6_UfJ1cqdGZVeCoSWQ0NEdag0VqrqczDxymkBTB1Ph7dBXOmyGmPEBcTXvBYZfzw";  // change Gscript ID
 
 OneButton button(button_brd, true);
 
@@ -342,7 +346,8 @@ void loop() {
     pic = 117;
     while (pic != 111) {
       if (comprueba == 0) {
-        ejecucionSetWifi();
+        //ejecucionSetWifi(); Se comenta porque son las credenciales de Firestore
+        initWiFi();
       } else {
       }
       almacenamiento();
@@ -1012,7 +1017,8 @@ void almacenamiento() {
       enviarSD();
     }
   } else if (pic == 117) {
-    enviarWifi();
+    //enviarWifi();
+    enviarSheets();
   }
 
   if (valPot == 0) {
@@ -1106,6 +1112,7 @@ void initWiFi() {
     display.print(".");
     display.display();
   }
+  refresh();
   Serial.println(WiFi.localIP());
   Serial.println();
   display.setCursor(0, 24);
@@ -1134,7 +1141,7 @@ void enviarWifi() {
     Serial.print("time: ");
     Serial.println(timestamp);
 
-    parentPath = databasePath + "/" + String(timestamp);
+    parentPath = /*databasePath + "/" + */ String(timestamp);
 
     json.set(tempPath.c_str(), String(TEMPERATURA));
     json.set(humPath.c_str(), String(HUMEDAD));
@@ -1148,5 +1155,23 @@ void enviarWifi() {
     json.set(caudalPath.c_str(), String(caudal_L_m));
     json.set(anePath.c_str(), String(ANEMOMETRO));
     Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentPath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());
+  }
+}
+
+void enviarSheets() {
+  timestamp = getTime();
+  timestamp = timestamp - timezone;
+  if ((millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) && timestamp != 0) {
+    sendDataPrevMillis = millis();
+    String urlFinal = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + "Tiempo=" + String(timestamp) + "&Temperatura=" + String(TEMPERATURA) + "&Humedad=" + String(HUMEDAD) + "&TempSuelo=" + String(SUELO) + "&Lluvia=" + String(LLUVIANALOG) + "&Luz=" + String(LUZ) + "&Altitud=" + String(ALTITUD) + "&Presion=" + String(PRESION) + "&TempAgua=" + String(TEMP_AGUA) + "&LuzDirecta=" + String(LUZ_DIRECTA) + "&Caudal=" + String(caudal_L_m) + "&Anemometro=" + String(ANEMOMETRO);
+    HTTPClient http;
+    http.begin(urlFinal.c_str());
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    int httpCode = http.GET();
+    String payload;
+    if (httpCode > 0) {
+      payload = http.getString();
+    }
+    http.end();
   }
 }
