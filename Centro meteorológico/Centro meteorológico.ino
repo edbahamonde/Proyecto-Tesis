@@ -49,7 +49,9 @@ int lluviaAnalog = 34, LLUVIANALOG, maxllu, minllu = 100;
 //Sensor de luminosidad
 int SENSOR_LUZ = 35, LUZ, maxluz = 0, minluz = 500;
 //Sensor de viento
-int SENSOR_ANE = 25, ANEMOMETRO, maxane = 0, minane = 500;
+int SENSOR_ANE = 25, ANEMOMETRO, maxane = 0, minane = 500, entrada;
+long int contadore;
+bool paso = 0;
 //Sensor de presión
 float ALTITUD;
 int maxalti = 0, minalti = 500;
@@ -77,7 +79,7 @@ int LUZ_DIRECTA, mindirecta = 30, maxdirecta = 0;
 #define CS_PIN 5
 String registro;
 bool sd_iniciada;
-String nombreArchivo = "/dataESP32_E.txt";
+String nombreArchivo = "/dataESP32_G.txt";
 int contador = 0, linea = 0;
 byte caracter;
 int cabeceraCreada = 0;
@@ -128,10 +130,21 @@ FirebaseJson json;
 unsigned long sendDataPrevMillis = 0;
 unsigned long timerDelay = 30000;  // 30000 = 30seg  // 60000 = 1 min
 int comprueba = 0;
-int timezone = 18000; //-18000 --> Se pone positivo porque luego se suma y es incorrecto
+int timezone = 18000;  //-18000 --> Se pone positivo porque luego se suma y es incorrecto
 int countWi = 0;
 //Google Sheets
 String GOOGLE_SCRIPT_ID = "AKfycbyD_AnwXW6JycjCNBVm265IaQznudTUHK5tJg55LnnMueZmxzuVGXs566DnSJOsCmCZ";  // change Gscript ID
+//Módulo GSM
+void init_gsm();
+void gprs_connect();
+boolean gprs_disconnect();
+boolean is_gprs_connected();
+void post_to_sheets();
+boolean waitResponse(String expected_answer = "OK", unsigned int timeout = 2000);
+const String APN = "internet.cnt.net.ec";
+const String USER = "";
+const String PASS = "";
+#define DELAY_MS 500
 
 OneButton button(button_brd, true);
 
@@ -257,17 +270,17 @@ const unsigned char bateriaicon[] PROGMEM = {
   0xff, 0xf0, 0x80, 0x10, 0xb6, 0xd8, 0xb6, 0xd8, 0xb6, 0xd8, 0xb6, 0xd8, 0xb6, 0xd8, 0x80, 0x10,
   0xff, 0xf0
 };
-const unsigned char bateriaicon2 [] PROGMEM = {
-	0xff, 0xf0, 0x80, 0x10, 0xb6, 0x18, 0xb6, 0x18, 0xb6, 0x18, 0xb6, 0x18, 0xb6, 0x18, 0x80, 0x10, 
-	0xff, 0xf0
+const unsigned char bateriaicon2[] PROGMEM = {
+  0xff, 0xf0, 0x80, 0x10, 0xb6, 0x18, 0xb6, 0x18, 0xb6, 0x18, 0xb6, 0x18, 0xb6, 0x18, 0x80, 0x10,
+  0xff, 0xf0
 };
-const unsigned char bateriaicon3 [] PROGMEM = {
-	0xff, 0xf0, 0x80, 0x10, 0xb0, 0x18, 0xb0, 0x18, 0xb0, 0x18, 0xb0, 0x18, 0xb0, 0x18, 0x80, 0x10, 
-	0xff, 0xf0
+const unsigned char bateriaicon3[] PROGMEM = {
+  0xff, 0xf0, 0x80, 0x10, 0xb0, 0x18, 0xb0, 0x18, 0xb0, 0x18, 0xb0, 0x18, 0xb0, 0x18, 0x80, 0x10,
+  0xff, 0xf0
 };
-const unsigned char bateriaicon4 [] PROGMEM = {
-	0xff, 0xf0, 0x80, 0x10, 0x80, 0x18, 0x80, 0x18, 0x80, 0x18, 0x80, 0x18, 0x80, 0x18, 0x80, 0x10, 
-	0xff, 0xf0
+const unsigned char bateriaicon4[] PROGMEM = {
+  0xff, 0xf0, 0x80, 0x10, 0x80, 0x18, 0x80, 0x18, 0x80, 0x18, 0x80, 0x18, 0x80, 0x18, 0x80, 0x10,
+  0xff, 0xf0
 };
 
 
@@ -276,6 +289,7 @@ void setup() {
   display.clearDisplay();
 
   Serial.begin(9600);
+  Serial2.begin(9600);
 
   Wire.begin();
   boolean status = bmp280.begin(0x76);
@@ -297,6 +311,7 @@ void setup() {
   pinMode(CAUDAL, INPUT);
   pinMode(SENSOR_ANE, INPUT);
   attachInterrupt(digitalPinToInterrupt(CAUDAL), ContarPulsos, RISING);
+  attachInterrupt(digitalPinToInterrupt(SENSOR_ANE), ContarGiros, RISING);
 
   DS18B20.begin();
 
@@ -304,6 +319,8 @@ void setup() {
   button.attachDoubleClick(doubleclick);
   button.attachLongPressStop(longPressStop);
   button.attachLongPressStart(longPressStart);
+
+  init_gsm();
 
   configTime(timezone, 0, "south-america.pool.ntp.org");
 }
@@ -366,14 +383,14 @@ void loop() {
       almacenamiento();
     }
   } else if (pic == 113) {
-    pic = 116;
-    while (pic != 113) {
+    pic = 118;
+    while (pic != 111) {
       refresh();
       display.setCursor(0, 15);
       display.setTextSize(1);
       display.print("Iniciando almacenamiento GSM");
       delay(2000);
-      pic = 113;
+      almacenamiento();
     }
   }
   if (pic == 121 || pic == 122 || pic == 123) {
@@ -410,6 +427,18 @@ void ejecucionSetWifi() {
 
 void ContarPulsos() {
   NumPulsos++;
+}
+
+void ContarGiros() {
+  entrada = digitalRead(SENSOR_ANE);
+
+  if (entrada == 1 && !paso) {
+    contadore++;
+    paso = 1;
+  }
+  if (entrada == 0) {
+    paso = 0;
+  }
 }
 
 int ObtenerFrecuencia() {
@@ -803,7 +832,7 @@ void iniciaVariables() {
   TEMP_BPM = bmp280.readTemperature();
   DS18B20.requestTemperatures();
   TEMP_AGUA = DS18B20.getTempCByIndex(0);
-  ANEMOMETRO = 0;  // ***********!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!REEMPLAZAR POR VALOR***********!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ANEMOMETRO = contadore;
   //tempF = tempC * 9 / 5 + 32;
   float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
   caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
@@ -1032,6 +1061,17 @@ void almacenamiento() {
   } else if (pic == 117) {
     //enviarWifi();
     enviarSheets();
+  } else if (pic == 118) {
+    if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) {
+      timestamp = getTime();
+      timestamp = timestamp - timezone;
+      sendDataPrevMillis = millis();
+      if (!is_gprs_connected()) {
+        gprs_connect();
+      }
+
+      post_to_sheets();
+    }
   }
 
   if (valPot == 0) {
@@ -1187,4 +1227,158 @@ void enviarSheets() {
     }
     http.end();
   }
+}
+
+void post_to_sheets() {
+
+  Serial2.println("AT+SAPBR=3,1,\"Contype\",\"GPRS\"");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+CSTT=\"internet\",\"guest\",\"guest\"");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+SAPBR=1,1");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+HTTPINIT");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+HTTPPARA=\"CID\",1");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+HTTPPARA=\"URL\",\"https://script.google.com/macros/s/AKfycbyD_AnwXW6JycjCNBVm265IaQznudTUHK5tJg55LnnMueZmxzuVGXs566DnSJOsCmCZ/exec?Tiempo=" + String(timestamp) + "&Temperatura=" + String(TEMPERATURA) + "&Humedad=" + String(HUMEDAD) + "&TempSuelo=" + String(SUELO) + "&Lluvia=" + String(LLUVIANALOG) + "&Luz=" + String(LUZ) + "&Altitud=" + String(ALTITUD) + "&Presion=" + String(PRESION) + "&TempAgua=" + String(TEMP_AGUA) + "&LuzDirecta=" + String(LUZ_DIRECTA) + "&Caudal=" + String(caudal_L_m) + "&Anemometro=" + String(ANEMOMETRO) + "\"");
+  waitResponse();
+  Serial.println(" ");
+  Serial2.println("AT+HTTPSSL=1");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+HTTPACTION=0");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+HTTPREAD");
+  delay(DELAY_MS);
+  waitResponse();
+  Serial2.println("AT+HTTPTERM");
+  delay(DELAY_MS);
+}
+void init_gsm() {
+  //Testing AT Command
+  Serial2.println("AT");
+  waitResponse();
+  delay(DELAY_MS);
+  //Checks if the SIM is ready
+  Serial2.println("AT+CPIN?");
+  waitResponse("+CPIN: READY");
+  delay(DELAY_MS);
+  //Turning ON full functionality
+  Serial2.println("AT+CFUN=1");
+  waitResponse();
+  delay(DELAY_MS);
+  //Turn ON verbose error codes
+  Serial2.println("AT+CMEE=2");
+  waitResponse();
+  delay(DELAY_MS);
+  //Enable battery checks
+  Serial2.println("AT+CBATCHK=1");
+  waitResponse();
+  delay(DELAY_MS);
+  //Register Network (+CREG: 0,1 or +CREG: 0,5 for valid network)
+  //+CREG: 0,1 or +CREG: 0,5 for valid network connection
+  Serial2.println("AT+CREG?");
+  waitResponse("+CREG: 0,");
+  delay(DELAY_MS);
+  //setting SMS text mode
+  Serial2.print("AT+CMGF=1\r");
+  waitResponse("OK");
+  delay(DELAY_MS);
+}
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//Connect to the internet
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+void gprs_connect() {
+  //DISABLE GPRS
+  Serial2.println("AT+SAPBR=0,1");
+  waitResponse("OK", 60000);
+  delay(DELAY_MS);
+  //Connecting to GPRS: GPRS - bearer profile 1
+  Serial2.println("AT+SAPBR=3,1,\"Contype\",\"GPRS\"");
+  waitResponse();
+  delay(DELAY_MS);
+  //sets the APN settings for your sim card network provider.
+  Serial2.println("AT+SAPBR=3,1,\"APN\"," + APN);
+  waitResponse();
+  delay(DELAY_MS);
+  //sets the user name settings for your sim card network provider.
+  if (USER != "") {
+    Serial2.println("AT+SAPBR=3,1,\"USER\"," + USER);
+    waitResponse();
+    delay(DELAY_MS);
+  }
+  //sets the password settings for your sim card network provider.
+  if (PASS != "") {
+    Serial2.println("AT+SAPBR=3,1,\"PASS\"," + PASS);
+    waitResponse();
+    delay(DELAY_MS);
+  }
+  //after executing the following command. the LED light of
+  //sim800l blinks very fast (twice a second)
+  //enable the GPRS: enable bearer 1
+  Serial2.println("AT+SAPBR=1,1");
+  waitResponse("OK", 30000);
+  delay(DELAY_MS);
+  //Get IP Address - Query the GPRS bearer context status
+  Serial2.println("AT+SAPBR=2,1");
+  waitResponse("OK");
+  delay(DELAY_MS);
+}
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+* Function: gprs_disconnect()
+* AT+CGATT = 1 modem is attached to GPRS to a network. 
+* AT+CGATT = 0 modem is not attached to GPRS to a network
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+boolean gprs_disconnect() {
+  //Disconnect GPRS
+  Serial2.println("AT+CGATT=0");
+  waitResponse("OK", 60000);
+  return true;
+}
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+* Function: gprs_disconnect()
+* checks if the gprs connected.
+* AT+CGATT = 1 modem is attached to GPRS to a network. 
+* AT+CGATT = 0 modem is not attached to GPRS to a network
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+boolean is_gprs_connected() {
+  Serial2.println("AT+CGATT?");
+  if (waitResponse("+CGATT: 1", 6000) == 1) { return false; }
+  return true;
+}
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//Handling AT COMMANDS
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//boolean waitResponse(String expected_answer="OK", unsigned int timeout=2000) //uncomment if syntax error (arduino)
+boolean waitResponse(String expected_answer, unsigned int timeout)  //uncomment if syntax error (esp8266)
+{
+  uint8_t x = 0, answer = 0;
+  String response;
+  unsigned long previous;
+
+  //Clean the input buffer
+  while (Serial2.available() > 0) Serial2.read();
+  previous = millis();
+  do {
+    //if data in UART INPUT BUFFER, reads it
+    if (Serial2.available() != 0) {
+      char c = Serial2.read();
+      response.concat(c);
+      x++;
+      //checks if the (response == expected_answer)
+      if (response.indexOf(expected_answer) > 0) {
+        answer = 1;
+      }
+    }
+  } while ((answer == 0) && ((millis() - previous) < timeout));
+
+  Serial.println(response);
+  return answer;
 }
