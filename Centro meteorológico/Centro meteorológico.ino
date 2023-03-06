@@ -15,12 +15,8 @@
 #include <DallasTemperature.h>
 // librería para el menú
 #include <OneButton.h>
-//Librerías para el envío a Firebase
+//Librerías para Wifi
 #include <WiFi.h>
-#include <Firebase_ESP_Client.h>
-#include "time.h"
-#include "addons/TokenHelper.h"  //--> Generación de tokens
-#include "addons/RTDBHelper.h"   //--> Impresión de funciones auxiliares
 //Librería para el envío a Google Sheets
 #include <HTTPClient.h>
 
@@ -79,9 +75,8 @@ int LUZ_DIRECTA, mindirecta = 30, maxdirecta = 0;
 #define CS_PIN 5
 String registro;
 bool sd_iniciada;
-String nombreArchivo = "/dataESP32_G.txt";
+String nombreArchivo = "/dataESP32_J.txt";
 int contador = 0, linea = 0;
-byte caracter;
 int cabeceraCreada = 0;
 //para el tiempo en ejecución -> para el guardado de datos
 int countTime = 0;
@@ -93,53 +88,20 @@ int button_brd = 14;
 long lastmillis = 0;
 long maxtime = 30000;
 String tipoModalidad = "";
-//Envío a Firebase
-#define WIFI_SSID "des"
-#define WIFI_PASSWORD "desdesdes"
-//#define WIFI_SSID "GALBATOR"
-//#define WIFI_PASSWORD "1753632718-001@."
-//#define WIFI_SSID "TP-Link_293C"
-//#define WIFI_PASSWORD "13904906"
 
-#define API_KEY "AIzaSyASpyvFug26lUAYfnODjtJLw0Jg8iLZ7og"
-//#define API_KEY "AIzaSyB9bpLXN8fZQC3F4st2ClGuMXtUkL5kDkY"
-#define USER_EMAIL "edbahamonde@espe.edu.ec"
-#define USER_PASSWORD "172596dD"
-#define DATABASE_URL "https://esp-firebase-demo-78fab-default-rtdb.firebaseio.com"
-//#define DATABASE_URL "https://esp-cm-default-rtdb.firebaseio.com"
-FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
-String uid;
-String databasePath;
-String timePath = "/timestamp";
-String tempPath = "/Temperatura";
-String humPath = "/Humedad";
-String suePath = "/TempSuelo";
-String lluPath = "/Lluvia";
-String luzPath = "/Luz";
-String altiPath = "/Altitud";
-String presPath = "/Presion";
-String tempAPath = "/TempAgua";
-String luz_direcPath = "/LuzDirecta";
-String caudalPath = "/Caudal";
-String anePath = "/Anemometro";
-String parentPath;
+#define WIFI_SSID "EMP1"
+#define WIFI_PASSWORD "estacionmet1"
+
 int timestamp;
-FirebaseJson json;
 unsigned long sendDataPrevMillis = 0;
 unsigned long timerDelay = 30000;  // 30000 = 30seg  // 60000 = 1 min
 int comprueba = 0;
 int timezone = 18000;  //-18000 --> Se pone positivo porque luego se suma y es incorrecto
 int countWi = 0;
 //Google Sheets
-String GOOGLE_SCRIPT_ID = "AKfycbyD_AnwXW6JycjCNBVm265IaQznudTUHK5tJg55LnnMueZmxzuVGXs566DnSJOsCmCZ";  // change Gscript ID
+String GOOGLE_SCRIPT_ID = "AKfycbwRNHCTi_ixJvjKSEj8e4KBNfCepBNeivXcMKRN1XSoUBv8wd1VOJg51TP99-sGXg63";  // change Gscript ID
 //Módulo GSM
-void init_gsm();
-void gprs_connect();
-boolean gprs_disconnect();
-boolean is_gprs_connected();
-void post_to_sheets();
+boolean gsm = 0;
 boolean waitResponse(String expected_answer = "OK", unsigned int timeout = 2000);
 const String APN = "internet.cnt.net.ec";
 const String USER = "";
@@ -151,6 +113,73 @@ OneButton button(button_brd, true);
 DHT dht(SENSORT_H, DHT22);
 
 File sd_file;
+const unsigned char loge [] PROGMEM = {
+	// 'D2, 128x64px
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc3, 0xff, 0xff, 0xf8, 0x00, 0x00, 0x3f, 0xff, 0xff, 0x80, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc1, 0xff, 0xff, 0xfc, 0x00, 0x07, 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc1, 0xff, 0xff, 0xfe, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xf8, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xfe, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0x80, 0x1f, 0xff, 0xff, 0xff, 0xff, 0x80, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0x80, 0x1f, 0xff, 0xff, 0xff, 0xff, 0x80, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0x80, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0xc0, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0xc0, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0xc0, 0xff, 0xff, 0xff, 0xc0, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x1e, 0x01, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0x7f, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0x3f, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0x3f, 0xff, 0xff, 0x80, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0x3f, 0xff, 0xff, 0x80, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0x7f, 0xff, 0xff, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0x7f, 0xff, 0xfe, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0xff, 0xff, 0xfc, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0xff, 0xff, 0xf8, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x81, 0xff, 0xff, 0xff, 0x80, 0x00, 0x01, 0xff, 0xff, 0xe0, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x81, 0xff, 0xff, 0xff, 0x80, 0x00, 0x03, 0xff, 0xff, 0xc0, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x81, 0xff, 0xff, 0xff, 0x80, 0x00, 0x07, 0xff, 0xff, 0x00, 0x00, 0x00, 
+	0x00, 0xff, 0xff, 0xff, 0x81, 0xff, 0xff, 0xff, 0x80, 0x00, 0x07, 0xff, 0xff, 0xff, 0x00, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0x81, 0xff, 0xff, 0xff, 0x00, 0x00, 0x0f, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0x83, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0x83, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x3f, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0x87, 0xff, 0xff, 0xfc, 0x00, 0x00, 0x7f, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf8, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf0, 0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xe0, 0x00, 0x03, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x0f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xf8, 0x00, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 0x00, 0x1f, 0xff, 0xff, 0xff, 0xff, 0xc0, 0x00, 
+	0x00, 0x7f, 0xff, 0xff, 0xff, 0xe0, 0x00, 0x00, 0x00, 0x07, 0xff, 0xff, 0xff, 0xff, 0x80, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
 
 //icono de temperatura
 const unsigned char temp[] PROGMEM = {
@@ -284,9 +313,10 @@ const unsigned char bateriaicon4[] PROGMEM = {
 };
 
 
-void setup() {
+void setup() {  
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
+  display.drawBitmap(0, 0, loge, 128, 64, WHITE);
 
   Serial.begin(9600);
   Serial2.begin(9600);
@@ -300,18 +330,13 @@ void setup() {
   } else {
     Serial.println("No se pudo iniciar la tarjeta SD");
     sd_iniciada = false;
-    //return; --> Hace que el programa no funcione correctamente
   }
-
-  /*if (!status) {
-    Serial.println("no conectado bpm");
-  }*/
 
   dht.begin();
   pinMode(CAUDAL, INPUT);
   pinMode(SENSOR_ANE, INPUT);
   attachInterrupt(digitalPinToInterrupt(CAUDAL), ContarPulsos, RISING);
-  attachInterrupt(digitalPinToInterrupt(SENSOR_ANE), ContarGiros, RISING);
+  //attachInterrupt(digitalPinToInterrupt(SENSOR_ANE), ContarGiros, RISING);
 
   DS18B20.begin();
 
@@ -322,16 +347,14 @@ void setup() {
 
   init_gsm();
 
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
   configTime(timezone, 0, "south-america.pool.ntp.org");
 }
 
 void loop() {
 
   button.tick();
-
-  if (millis() >= (lastmillis + maxtime) && pic != 116) {
-    pic = 0;
-  }
 
   Serial.println(pic);
 
@@ -372,16 +395,17 @@ void loop() {
       }
       almacenamiento();
     }
+    pic=0;
   } else if (pic == 112) {
     pic = 117;
     while (pic != 111) {
       if (comprueba == 0) {
-        //ejecucionSetWifi(); Se comenta porque son las credenciales de Firestore
         initWiFi();
       } else {
       }
       almacenamiento();
     }
+    pic=0;
   } else if (pic == 113) {
     pic = 118;
     while (pic != 111) {
@@ -389,9 +413,12 @@ void loop() {
       display.setCursor(0, 15);
       display.setTextSize(1);
       display.print("Iniciando almacenamiento GSM");
-      delay(2000);
+      if (comprueba != 1) {
+        initWiFi();
+      }
       almacenamiento();
     }
+    pic=0;
   }
   if (pic == 121 || pic == 122 || pic == 123) {
     pic = 1;
@@ -403,33 +430,11 @@ void loop() {
   }
 }
 
-void ejecucionSetWifi() {
-  initWiFi();
-  config.api_key = API_KEY;
-  auth.user.email = USER_EMAIL;
-  auth.user.password = USER_PASSWORD;
-  config.database_url = DATABASE_URL;
-  Firebase.reconnectWiFi(true);
-  fbdo.setResponseSize(4096);
-  config.token_status_callback = tokenStatusCallback;
-  config.max_token_generation_retry = 5;
-  Firebase.begin(&config, &auth);
-  Serial.println("Getting User UID");
-  while ((auth.token.uid) == "") {
-    Serial.print('.');
-    delay(1000);
-  }
-  uid = auth.token.uid.c_str();
-  Serial.print("User UID: ");
-  Serial.println(uid);
-  databasePath = "/UsersData/" + uid + "/readings";
-}
-
 void ContarPulsos() {
   NumPulsos++;
 }
 
-void ContarGiros() {
+/*void ContarGiros() {
   entrada = digitalRead(SENSOR_ANE);
 
   if (entrada == 1 && !paso) {
@@ -439,7 +444,7 @@ void ContarGiros() {
   if (entrada == 0) {
     paso = 0;
   }
-}
+}*/
 
 int ObtenerFrecuencia() {
   NumPulsos = 0;
@@ -497,7 +502,7 @@ void mostrarDatos(int valorSensor, String nombre, int max, int min) {
     display.print("mm");
     display.setTextSize(3);
   } else if (nombre == "Luz") {
-    conexLuz();
+    //conexLuz();
     if (LUZ < 112) {
       display.drawBitmap(10, 11, noche, 30, 20, WHITE);
     } else if (LUZ >= 350) {
@@ -598,29 +603,8 @@ void mostrarDatos(int valorSensor, String nombre, int max, int min) {
   display.display();
 }
 
-void fechaActual() {
-  time_t now = time(nullptr);
-  struct tm* p_tm = localtime(&now);
-
-  /*display.setCursor(0, 57);
-  display.print(p_tm->tm_hour);
-  display.print(":");
-  if (p_tm->tm_min < 10)
-    display.print("0");
-  display.print(p_tm->tm_min);
-
-  display.setCursor(64, 57);
-  display.print(p_tm->tm_mday);
-  display.print("/");
-  display.print(p_tm->tm_mon + 1);
-  display.print("/");
-  display.print(p_tm->tm_year + 1900);*/
-}
-
 void mostrarTodo() {
   display.setTextSize(1);
-
-  //fechaActual();
 
   display.setCursor(0, 14);
   display.print("T:");
@@ -636,7 +620,7 @@ void mostrarTodo() {
 
   display.setCursor(0, 44);
   display.print("LL:");
-  display.print(LLUVIANALOG, 0);
+  display.print(LLUVIANALOG);
 
   display.setCursor(35, 14);
   display.print("LU:");
@@ -731,14 +715,12 @@ void enviarSD() {
     Serial.println("Problema al enviar registros");
   }
   display.display();
-  /*********************************************/
 }
 
 void enviarDatos() {
   sd_file.print(
     String(timestamp) + "," + String(TEMPERATURA) + "," + String(HUMEDAD) + "," + String(SUELO) + "," + String(LLUVIANALOG) + "," + String(LUZ) + "," + String(ALTITUD) + "," + String(PRESION) + "," + String(TEMP_AGUA) + "," + String(LUZ_DIRECTA) + "," + String(caudal_L_m) + "," + String(ANEMOMETRO) + "\n");
   sd_file.close();
-  Serial.println(contador);
   contador++;
 }
 
@@ -751,7 +733,7 @@ void headerArchivo() {
     sd_file.print(",");
     sd_file.print("Humedad");
     sd_file.print(",");
-    sd_file.print("TempSuelo");
+    sd_file.print("HumSuelo");
     sd_file.print(",");
     sd_file.print("Lluvia");
     sd_file.print(",");
@@ -811,9 +793,13 @@ void header() {
   display.print(valPot);
   display.write(178);
 
-  display.drawBitmap(68, 0, gsmicon, 9, 9, WHITE);
+  if(gsm){
+    display.drawBitmap(68, 0, gsmicon, 9, 9, WHITE);
+  }
 
-  display.drawBitmap(82, 0, wificon, 9, 9, WHITE);
+  if(WiFi.status() == WL_CONNECTED){
+   display.drawBitmap(82, 0, wificon, 9, 9, WHITE); 
+  }  
 
   display.drawBitmap(95, 0, bateriaicon, 13, 9, WHITE);
   display.setCursor(110, 0);
@@ -826,13 +812,20 @@ void iniciaVariables() {
   HUMEDAD = dht.readHumidity();
   SUELO = map(analogRead(SENSOR_HS), 0, 4095, 100, 0);
   LLUVIANALOG = map(analogRead(lluviaAnalog), 0, 4095, 100, 0);
-  LUZ = analogRead(SENSOR_LUZ);
+  LUZ = map(analogRead(SENSOR_LUZ), 0, 4095, 4095, 0);
   ALTITUD = bmp280.readAltitude(1011.18);
   PRESION = (bmp280.readPressure() / 100);
   TEMP_BPM = bmp280.readTemperature();
   DS18B20.requestTemperatures();
   TEMP_AGUA = DS18B20.getTempCByIndex(0);
-  ANEMOMETRO = contadore;
+  ANEMOMETRO = analogRead(SENSOR_ANE);
+  if(ANEMOMETRO > 3000 && !paso){
+    contadore++;
+    paso = 1;
+  }
+  if (ANEMOMETRO <= 3000){
+    paso = 0;
+  }
   //tempF = tempC * 9 / 5 + 32;
   float frecuencia = ObtenerFrecuencia();       //obtenemos la Frecuencia de los pulsos en Hz
   caudal_L_m = frecuencia / factor_conversion;  //calculamos el caudal en L/m
@@ -1059,7 +1052,6 @@ void almacenamiento() {
       enviarSD();
     }
   } else if (pic == 117) {
-    //enviarWifi();
     enviarSheets();
   } else if (pic == 118) {
     if (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) {
@@ -1117,57 +1109,21 @@ void almacenamiento() {
     pic = 111;  //--> Hasta aquí sale con 111 del while --> colocar un botón para poder salir
   }
 
-  Serial.print(" ");
-  Serial.print("Tiempo: ");
-  Serial.print(timestamp);
-  Serial.print("\tTemperatura: ");
-  Serial.print(TEMPERATURA);
-  Serial.print("\tHumedad: ");
-  Serial.print(HUMEDAD);
-  Serial.print("\tHumedad Suelo: ");
-  Serial.print(SUELO);
-  Serial.print("\tLluvia A: ");
-  Serial.print(LLUVIANALOG);
-  Serial.print("\tLuz: ");
-  Serial.print(LUZ);
-  Serial.print("\tAltitud: ");
-  Serial.print(ALTITUD);
-  Serial.print("\tPresion: ");
-  Serial.print(PRESION);
-  Serial.print("\tTemp Agua: ");
-  Serial.print(TEMP_AGUA);
-  Serial.print("LuzDirecta: ");
-  Serial.print(LUZ_DIRECTA);
-  Serial.print("\tCaudal: ");
-  Serial.print(caudal_L_m, 3);
-  Serial.print(" L/min");
-  Serial.print("\tAnemometro: ");
-  Serial.print(ANEMOMETRO);
-  Serial.print("\tTEMP_BPM: ");
-  Serial.print(TEMP_BPM);
-  Serial.print("\tPotenciometro: ");
-  Serial.print(valPot);
-  Serial.println();
 }
 
 void initWiFi() {
   refresh();
   display.setCursor(0, 15);
-  Serial.print("Conectando Wi-Fi..");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   display.println("\nConectando a Wi-Fi");
   display.display();
-  while (/*WiFi.status() != WL_CONNECTED ||*/ countWi != 40) {
-    Serial.print('.');
+  while (countWi != 40) {
     countWi++;
-    Serial.print(countWi);
     delay(500);
     display.print(".");
     display.display();
   }
   refresh();
-  Serial.println(WiFi.localIP());
-  Serial.println();
   display.setCursor(0, 24);
   display.print(WiFi.localIP());
   comprueba = 1;
@@ -1184,39 +1140,12 @@ unsigned long getTime() {
   return now;
 }
 
-void enviarWifi() {
-  timestamp = getTime();
-  timestamp = timestamp - timezone;
-
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) && timestamp != 0) {
-    sendDataPrevMillis = millis();
-
-    Serial.print("time: ");
-    Serial.println(timestamp);
-
-    parentPath = /*databasePath + "/" + */ String(timestamp);
-
-    json.set(tempPath.c_str(), String(TEMPERATURA));
-    json.set(humPath.c_str(), String(HUMEDAD));
-    json.set(suePath.c_str(), String(SUELO));
-    json.set(lluPath.c_str(), String(LLUVIANALOG));
-    json.set(luzPath.c_str(), String(LUZ));
-    json.set(altiPath.c_str(), String(ALTITUD));
-    json.set(presPath.c_str(), String(PRESION));
-    json.set(tempAPath.c_str(), String(TEMP_AGUA));
-    json.set(luz_direcPath.c_str(), String(LUZ_DIRECTA));
-    json.set(caudalPath.c_str(), String(caudal_L_m));
-    json.set(anePath.c_str(), String(ANEMOMETRO));
-    Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentPath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());
-  }
-}
-
 void enviarSheets() {
   timestamp = getTime();
   timestamp = timestamp - timezone;
   if ((millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0) && timestamp != 0) {
     sendDataPrevMillis = millis();
-    String urlFinal = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + "Tiempo=" + String(timestamp) + "&Temperatura=" + String(TEMPERATURA) + "&Humedad=" + String(HUMEDAD) + "&TempSuelo=" + String(SUELO) + "&Lluvia=" + String(LLUVIANALOG) + "&Luz=" + String(LUZ) + "&Altitud=" + String(ALTITUD) + "&Presion=" + String(PRESION) + "&TempAgua=" + String(TEMP_AGUA) + "&LuzDirecta=" + String(LUZ_DIRECTA) + "&Caudal=" + String(caudal_L_m) + "&Anemometro=" + String(ANEMOMETRO);
+    String urlFinal = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + "Tiempo=" + String(timestamp) + "&Temperatura=" + String(TEMPERATURA) + "&Humedad=" + String(HUMEDAD) + "&HumSuelo=" + String(SUELO) + "&Lluvia=" + String(LLUVIANALOG) + "&Luz=" + String(LUZ) + "&Altitud=" + String(ALTITUD) + "&Presion=" + String(PRESION) + "&TempAgua=" + String(TEMP_AGUA) + "&LuzDirecta=" + String(LUZ_DIRECTA) + "&Caudal=" + String(caudal_L_m) + "&Anemometro=" + String(ANEMOMETRO);
     HTTPClient http;
     http.begin(urlFinal.c_str());
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
@@ -1246,7 +1175,7 @@ void post_to_sheets() {
   Serial2.println("AT+HTTPPARA=\"CID\",1");
   delay(DELAY_MS);
   waitResponse();
-  Serial2.println("AT+HTTPPARA=\"URL\",\"https://script.google.com/macros/s/AKfycbyD_AnwXW6JycjCNBVm265IaQznudTUHK5tJg55LnnMueZmxzuVGXs566DnSJOsCmCZ/exec?Tiempo=" + String(timestamp) + "&Temperatura=" + String(TEMPERATURA) + "&Humedad=" + String(HUMEDAD) + "&TempSuelo=" + String(SUELO) + "&Lluvia=" + String(LLUVIANALOG) + "&Luz=" + String(LUZ) + "&Altitud=" + String(ALTITUD) + "&Presion=" + String(PRESION) + "&TempAgua=" + String(TEMP_AGUA) + "&LuzDirecta=" + String(LUZ_DIRECTA) + "&Caudal=" + String(caudal_L_m) + "&Anemometro=" + String(ANEMOMETRO) + "\"");
+  Serial2.println("AT+HTTPPARA=\"URL\",\"https://script.google.com/macros/s/AKfycbyD_AnwXW6JycjCNBVm265IaQznudTUHK5tJg55LnnMueZmxzuVGXs566DnSJOsCmCZ/exec?Tiempo=" + String(timestamp) + "&Temperatura=" + String(TEMPERATURA) + "&Humedad=" + String(HUMEDAD) + "&HumSuelo=" + String(SUELO) + "&Lluvia=" + String(LLUVIANALOG) + "&Luz=" + String(LUZ) + "&Altitud=" + String(ALTITUD) + "&Presion=" + String(PRESION) + "&TempAgua=" + String(TEMP_AGUA) + "&LuzDirecta=" + String(LUZ_DIRECTA) + "&Caudal=" + String(caudal_L_m) + "&Anemometro=" + String(ANEMOMETRO) + "\"");
   waitResponse();
   Serial.println(" ");
   Serial2.println("AT+HTTPSSL=1");
@@ -1262,19 +1191,19 @@ void post_to_sheets() {
   delay(DELAY_MS);
 }
 void init_gsm() {
-  //Testing AT Command
+  //Comprueba el comando AT
   Serial2.println("AT");
   waitResponse();
   delay(DELAY_MS);
-  //Checks if the SIM is ready
+  //Verifica si está listo
   Serial2.println("AT+CPIN?");
   waitResponse("+CPIN: READY");
   delay(DELAY_MS);
-  //Turning ON full functionality
+  //Activa la funcionalidad
   Serial2.println("AT+CFUN=1");
   waitResponse();
   delay(DELAY_MS);
-  //Turn ON verbose error codes
+  //Activa los errores
   Serial2.println("AT+CMEE=2");
   waitResponse();
   delay(DELAY_MS);
@@ -1289,11 +1218,15 @@ void init_gsm() {
   delay(DELAY_MS);
   //setting SMS text mode
   Serial2.print("AT+CMGF=1\r");
-  waitResponse("OK");
+  if(waitResponse("OK")){
+    gsm = 1;
+  }else{
+    gsm = 0;
+  }
   delay(DELAY_MS);
 }
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-//Connect to the internet
+//Conexión a internet
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 void gprs_connect() {
   //DISABLE GPRS
@@ -1314,7 +1247,7 @@ void gprs_connect() {
     waitResponse();
     delay(DELAY_MS);
   }
-  //sets the password settings for your sim card network provider.
+  //Coloca la contraseña del proveedor de servicio
   if (PASS != "") {
     Serial2.println("AT+SAPBR=3,1,\"PASS\"," + PASS);
     waitResponse();
@@ -1379,6 +1312,5 @@ boolean waitResponse(String expected_answer, unsigned int timeout)  //uncomment 
     }
   } while ((answer == 0) && ((millis() - previous) < timeout));
 
-  Serial.println(response);
   return answer;
 }
